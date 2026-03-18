@@ -1,0 +1,16 @@
+(plane_proxy) {
+    request_body {
+        max_size 5242880
+    }
+
+    # REMOVED: reverse_proxy /spaces/* plane-space:3000  # plane-space removed in Step 4
+    # REMOVED: reverse_proxy /god-mode/* plane-admin:3000  # plane-admin will be removed in Step 5
+    reverse_proxy /api/* plane-api:8000
+    reverse_proxy /auth/* plane-api:8000
+    # REMOVED: reverse_proxy /uploads/* plane-minio:9000  # plane-minio removed in Step 1
+    reverse_proxy /* plane-web:3000
+}
+
+:80 {
+    import plane_proxy
+}

@@ -1,0 +1,25 @@
+# ApexCode Observability - Requirements
+# =====================================
+# Install with: pip install -r requirements.txt
+
+# Core dependencies
+inspect_ai>=0.3.160
+pyyaml>=6.0
+python-dotenv>=1.0.0  # Load API keys from .env file
+
+# LLM provider SDKs (required by inspect_ai for model access)
+anthropic>=0.39.0
+openai>=1.0.0
+google-generativeai>=0.8.0
+google-genai>=1.0.0
+xai_sdk>=0.1.0
+
+# Additional dependencies for eval_runner
+docker>=7.0.0
+
+# Development dependencies (optional, uncomment if needed)
+# pytest>=7.0.0
+# pytest-asyncio>=0.23.0
+# ruff>=0.1.0
+# mypy>=1.0.0
+# types-PyYAML>=6.0.0

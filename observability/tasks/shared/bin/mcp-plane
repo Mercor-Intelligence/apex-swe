@@ -1,0 +1,23 @@
+#!/bin/bash
+# Plane MCP server wrapper
+# Sources environment variables and runs the MCP server
+
+# Source config file and export all variables
+if [ -f /config/mcp-config.txt ]; then
+    set -a
+    source /config/mcp-config.txt
+    set +a
+fi
+
+# Verify required variables are set
+if [ -z "$PLANE_API_HOST_URL" ] || [ -z "$PLANE_API_KEY" ]; then
+    echo "Error: Missing required Plane environment variables" >&2
+    echo "Required: PLANE_API_HOST_URL, PLANE_API_KEY" >&2
+    echo "Current values:" >&2
+    echo "  PLANE_API_HOST_URL=${PLANE_API_HOST_URL:-<not set>}" >&2
+    echo "  PLANE_API_KEY=${PLANE_API_KEY:+<set>}${PLANE_API_KEY:-<not set>}" >&2
+    exit 1
+fi
+
+# Run the Plane MCP server
+exec node /app/mcp-servers/plane/build/index.js "$@"

@@ -1,0 +1,46 @@
+# Service Build Configurations
+#
+# This file defines services that are built locally from Dockerfiles.
+# All images are built from shared/dockerfiles/ - NO ECR pulls.
+#
+# service_name:
+#   image_tag: "local-image-tag"                    # Tag for the built image
+#   dockerfile: "Dockerfile.xxx-lightweight"        # Dockerfile in tasks/shared/dockerfiles/
+#   entrypoint_script: "docker-entrypoint-xxx.sh"   # Entrypoint script (for hash tracking)
+#   patch_label: "apex_xxx_build"                   # Docker label to track build state
+#   compose_env_var: "${XXX_IMAGE_TAG}"             # Env var pattern used in docker-compose.yaml
+
+plane:
+  image_tag: "plane-api"
+  dockerfile: "Dockerfile.plane-lightweight"
+  entrypoint_script: "docker-entrypoint-api-lightweight.sh"
+  patch_label: "apex_plane_build"
+  compose_env_var: "${PLANE_IMAGE_TAG}"
+
+mattermost:
+  image_tag: "mattermost-lightweight"
+  dockerfile: "Dockerfile.mattermost-lightweight"
+  entrypoint_script: "docker-entrypoint-mattermost-lightweight.sh"
+  patch_label: "apex_mattermost_build"
+  compose_env_var: "${MATTERMOST_IMAGE_TAG}"
+
+medusa:
+  image_tag: "medusa-lightweight"
+  dockerfile: "Dockerfile.medusa-lightweight"
+  entrypoint_script: "docker-entrypoint-medusa-lightweight.sh"
+  patch_label: "apex_medusa_build"
+  compose_env_var: "${MEDUSA_IMAGE_TAG}"
+
+espocrm:
+  image_tag: "espocrm"
+  dockerfile: "Dockerfile.espocrm-lightweight"
+  entrypoint_script: "docker-entrypoint-espocrm-lightweight.sh"
+  patch_label: "apex_espocrm_build"
+  compose_env_var: "${ESPOCRM_IMAGE_TAG}"
+
+zammad:
+  image_tag: "zammad-lightweight"
+  dockerfile: "Dockerfile.zammad-lightweight"
+  entrypoint_script: "docker-entrypoint-zammad-lightweight.sh"
+  patch_label: "apex_zammad_build"
+  compose_env_var: "${ZAMMAD_IMAGE_TAG}"

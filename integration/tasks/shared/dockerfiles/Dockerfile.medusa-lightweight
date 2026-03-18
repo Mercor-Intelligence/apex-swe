@@ -1,0 +1,38 @@
+# Development-friendly base
+FROM node:20-bullseye-slim
+
+# Tools + Postgres + Redis + tini + jq
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ca-certificates curl bash tini jq \
+    postgresql postgresql-contrib \
+    redis-server \
+  && rm -rf /var/lib/apt/lists/*
+
+# Yarn v1 (matches Medusa starter)
+RUN corepack enable && corepack prepare yarn@1.22.19 --activate
+
+ENV APP_DIR=/server \
+    PGDATA=/var/lib/postgresql/data \
+    NODE_ENV=development
+
+# Clone the Medusa starter inside the image
+RUN git clone --depth=1 https://github.com/medusajs/medusa-starter-default.git "$APP_DIR"
+WORKDIR $APP_DIR
+
+# Install deps from the cloned repo
+RUN yarn install --frozen-lockfile || yarn install --network-timeout 600000
+
+# Entry script
+COPY shared/dockerfiles/docker-entrypoint-medusa-lightweight.sh /usr/local/bin/docker-entrypoint-medusa-lightweight.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-medusa-lightweight.sh
+
+# Install Medusa JS SDK for programmatic admin setup
+RUN yarn add @medusajs/js-sdk@latest
+
+
+# Let Postgres listen on all addrs (useful if you later map 5432)
+RUN sed -ri "s/^#?(listen_addresses).*/\\1 = '*'/" /etc/postgresql/*/main/postgresql.conf || true
+
+EXPOSE 9000
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/usr/local/bin/docker-entrypoint-medusa-lightweight.sh"]

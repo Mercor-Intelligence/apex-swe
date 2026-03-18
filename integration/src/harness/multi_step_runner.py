@@ -1,0 +1,771 @@
+"""Multi-step task runner that allows agents to take multiple actions."""
+
+import concurrent.futures
+import json
+import logging
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+import psutil
+
+from src.utils import LiteLLM
+from src.tools import ToolExecutor
+from src.utils.prompt_utils import build_episode_prompt, build_initial_prompt
+from src.utils.docker_manager import docker_environment
+from .evaluator import TaskEvaluator
+from src.utils import TaskLogger, get_logger
+from .data_models import (
+    ExecutionStatus,
+    TaskContext,
+    TaskExecution,
+)
+from src.utils.terminal_manager import TerminalSessionManager
+from src.utils.harness_utils import (
+    cleanup_environment,
+    setup_task_environment,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _ensure_git_baseline(
+    docker_manager, repo_path: str = "/app", log: TaskLogger | None = None
+) -> bool:
+    """Initialize git inside the container to enable diff capture."""
+    try:
+        check_git = docker_manager.exec_command("which git", timeout=5)
+        if check_git["exit_code"] != 0:
+            if log:
+                log._log("git not available in container; cannot capture agent.patch")
+            return False
+
+        is_repo = (
+            docker_manager.exec_command(
+                f"cd {repo_path} && git rev-parse --is-inside-work-tree",
+                timeout=5,
+            )["exit_code"]
+            == 0
+        )
+
+        if not is_repo:
+            docker_manager.exec_command(f"cd {repo_path} && git init", timeout=10)
+            docker_manager.exec_command(
+                f"cd {repo_path} && git config user.email 'apex@eval.local'", timeout=5
+            )
+            docker_manager.exec_command(
+                f"cd {repo_path} && git config user.name 'APEX Evaluator'", timeout=5
+            )
+
+        # Ensure we have a baseline commit and include any newly copied files
+        head_exists = (
+            docker_manager.exec_command(
+                f"cd {repo_path} && git rev-parse --verify HEAD", timeout=5
+            )["exit_code"]
+            == 0
+        )
+        if not head_exists:
+            docker_manager.exec_command(f"cd {repo_path} && git add -A", timeout=60)
+            docker_manager.exec_command(
+                f"cd {repo_path} && git commit -m 'Baseline state for APEX evaluation' --allow-empty",
+                timeout=60,
+            )
+        else:
+            # If the working tree is dirty (newly copied task files), commit them to baseline
+            status = docker_manager.exec_command(
+                f"cd {repo_path} && git status --porcelain", timeout=30
+            )
+            if status.get("stdout", "").strip():
+                docker_manager.exec_command(f"cd {repo_path} && git add -A", timeout=60)
+                docker_manager.exec_command(
+                    f"cd {repo_path} && git commit -m 'Baseline state for APEX evaluation' --allow-empty",
+                    timeout=60,
+                )
+
+        return True
+    except Exception as e:
+        if log:
+            log._log(f"Failed to initialize git for agent patch capture: {e}")
+        return False
+
+
+def _capture_agent_patch(
+    docker_manager, task_logger: TaskLogger | None, repo_path: str = "/app"
+) -> bool:
+    """Write git diff to agent.patch inside the task log directory."""
+    try:
+        docker_manager.exec_command(f"cd {repo_path} && git add -A", timeout=60)
+        diff_result = docker_manager.exec_command(
+            f"cd {repo_path} && git diff --cached HEAD", timeout=30
+        )
+        patch_text = diff_result.get("stdout", "")
+        if not patch_text.strip():
+            # Try non-cached diff as fallback
+            diff_result = docker_manager.exec_command(
+                f"cd {repo_path} && git diff HEAD", timeout=30
+            )
+            patch_text = diff_result.get("stdout", "")
+
+        if patch_text and patch_text.strip() and task_logger:
+            agent_patch_file = task_logger.log_dir / "agent.patch"
+            agent_patch_file.write_text(patch_text)
+            task_logger._log(f"Captured agent.patch ({len(patch_text.encode('utf-8'))} bytes)")
+            return True
+    except Exception as e:
+        if task_logger:
+            task_logger._log(f"Failed to capture agent.patch: {e}")
+    return False
+
+
+class ContextLengthExceededError(Exception):
+    """Raised when the conversation exceeds the model's context length."""
+
+    pass
+
+
+class ConversationTooLongError(Exception):
+    """Raised when conversation history becomes too long to manage effectively."""
+
+    pass
+
+
+class MultiStepRunner:
+    """Handles multi-step task execution with tool support."""
+
+    def __init__(
+        self,
+        llm: LiteLLM,
+        max_steps: int | None = None,
+        monitor_memory: bool = True,
+        log_level: str = "INFO",
+        todo_tool_enabled: bool = False,
+    ):
+        """
+        Initialize multi-step runner.
+
+        Args:
+            llm: LLM for task execution
+            max_steps: Maximum number of steps allowed (None = unlimited)
+            monitor_memory: Whether to monitor memory usage
+            log_level: Logging level for execution logs
+            todo_tool_enabled: Whether to enable the todo tool
+        """
+        self.llm = llm
+        self.max_steps = max_steps
+        self.monitor_memory = monitor_memory
+        self.todo_tool_enabled = todo_tool_enabled
+        self.log_level = log_level
+
+    def calculate_max_memory(self, steps: list[dict[str, Any]]) -> int | None:
+        """Calculate maximum memory usage across all steps."""
+        try:
+            return int(psutil.Process().memory_info().rss / 1024 / 1024)
+        except:
+            return None
+
+    def check_completion_indication(self, content: str) -> bool:
+        """Check if agent indicates task completion."""
+        xml_completion_tags = [
+            "<task_complete>true</task_complete>",
+            "task_complete>true<",
+            "task_complete>true",
+        ]
+
+        content_lower = content.lower()
+        return any(tag in content_lower for tag in xml_completion_tags)
+
+    def _setup_docker_environment(self, task_context, max_timeout, docker_ctx, logger, task_logger):
+        """
+        Setup and start Docker environment with timeout.
+
+        Returns:
+            docker_manager: The initialized Docker manager
+        """
+        docker_manager = None
+
+        def start_docker():
+            return docker_ctx.__enter__()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(start_docker)
+
+            try:
+                docker_manager = future.result(timeout=max_timeout)
+
+                if logger:
+                    logger._log(f"Running docker compose command: docker compose up -d")
+            except concurrent.futures.TimeoutError:
+                future.cancel()
+                raise RuntimeError(f"Docker container startup timed out after {max_timeout}s")
+            except Exception as e:
+                raise RuntimeError(f"Docker startup failed: {e}")
+
+        return docker_manager
+
+    def _setup_git_and_mcp(self, docker_manager, task_context, logger, task_logger):
+        """
+        Setup git baseline and MCP configuration if needed.
+
+        Returns:
+            git_ready: Boolean indicating if git is ready
+        """
+        # Setup git baseline
+        git_ready = _ensure_git_baseline(docker_manager, repo_path="/app", log=task_logger)
+
+        # Setup MCP if tool containers are configured
+        has_tool_containers = docker_manager.has_tool_containers(task_context)
+        if has_tool_containers:
+            try:
+                requirements = docker_manager.get_required_mcp_requirements()
+                if requirements:
+                    print(f"Required MCP requirements: {', '.join(requirements)}")
+                    if logger:
+                        logger._log(f"Required MCP requirements: {', '.join(requirements)}")
+                    req_text = "\n".join(requirements) + "\n"
+                    docker_manager.exec_command(
+                        f"mkdir -p /config && printf '%s' '{req_text}' > /config/mcp-required.txt.tmp && mv /config/mcp-required.txt.tmp /config/mcp-required.txt"
+                    )
+            except Exception as e:
+                if logger:
+                    logger._log(f"Failed to write mcp-required.txt: {e}")
+
+            # Wait for MCP config to be ready
+            mcp_ready = False
+            for i in range(120):
+                try:
+                    result = docker_manager._container.exec_run(
+                        cmd=["sh", "-lc", "sh /app/wait-for-mcp-config.sh"]
+                    )
+                    if result.exit_code == 0:
+                        mcp_ready = True
+                        if logger:
+                            logger._log("MCP config is ready and task can begin")
+                        break
+                    else:
+                        print("MCP config is not ready, waiting for 10 seconds")
+                        if logger:
+                            logger._log("MCP config is not ready, waiting for 10 seconds")
+                except Exception as e:
+                    if logger:
+                        logger._log(f"⚠️ MCP config check failed: {e}")
+                if logger and i % 6 == 0:
+                    logger._log(
+                        f"⏳ Waiting for API keys in MCP config to be ready... ({i + 1}/120)"
+                    )
+                time.sleep(10)
+
+            if not mcp_ready:
+                if logger:
+                    logger._log("MCP config not ready after 20 minutes, aborting task execution")
+                raise RuntimeError("MCP configuration not ready after 20 minutes")
+
+        return git_ready
+
+    def _initialize_tools_and_prompt(
+        self,
+        working_dir,
+        docker_manager,
+        task_context,
+        tool_executor,
+        terminal_manager,
+        task_logger,
+        max_timeout,
+    ):
+        """
+        Initialize tool executor and build initial prompt.
+
+        Returns:
+            tuple: (initial_prompt, terminal_manager)
+        """
+        # Capture pre-agent terminal state
+        terminal_manager.capture_pane_safely(tool_executor, task_logger, "pre-agent.txt")
+
+        # Build initial prompt with todo list if enabled
+        todo_list_text = tool_executor.get_todo_list_text()
+        initial_prompt = build_initial_prompt(task_context, working_dir, tool_executor, max_timeout)
+        if todo_list_text:
+            initial_prompt = initial_prompt + f"\n\nINITIAL TODO LIST:\n{todo_list_text}"
+
+        return initial_prompt
+
+    def _execute_agent_loop(
+        self,
+        task_context,
+        max_timeout,
+        start_time,
+        initial_prompt,
+        tool_executor,
+        terminal_manager,
+        logger,
+        task_logger,
+        steps,
+    ):
+        """
+        Execute the main agent interaction loop.
+
+        Returns:
+            None (modifies steps list in place)
+        """
+        current_prompt = initial_prompt
+        self.llm.conversation_history = []
+        effective_max_steps = task_context.max_steps or self.max_steps
+
+        step_num = 0
+        episode_task_logger = None
+
+        while True:
+            step_num += 1
+
+            # Check timeout
+            elapsed_time = (datetime.now() - start_time).total_seconds()
+            if elapsed_time > max_timeout:
+                if logger:
+                    logger._log(f"Reached timeout limit ({max_timeout}s)")
+                break
+
+            # Check max steps
+            if effective_max_steps and step_num > effective_max_steps:
+                if logger:
+                    logger._log(f"Reached maximum steps limit ({effective_max_steps})")
+                break
+
+            # Check token limits
+            status = self.llm.get_conversation_status()
+            if status["current_tokens"] > self.llm.max_tokens * 0.9:
+                if logger:
+                    logger._log(
+                        f"Conversation approaching hard token limit ({status['current_tokens']} tokens), terminating"
+                    )
+                raise ConversationTooLongError(
+                    f"Conversation reached {status['current_tokens']} tokens, approaching model limit"
+                )
+
+            # Define episode_num outside the logger block since it's used unconditionally
+            episode_num = step_num - 1
+
+            # Create episode logger
+            if logger:
+                task_log_dir = (
+                    logger.run_dir
+                    / task_context.task_id
+                    / f"{task_context.task_id}.1-of-1.{logger.timestamp}"
+                )
+                episode_task_logger = TaskLogger(
+                    logger.run_id, task_context.task_id, episode_num, task_log_dir
+                )
+
+                episode_task_logger.log_prompt(current_prompt)
+
+            # Manage conversation tokens
+            elapsed_time = (datetime.now() - start_time).total_seconds()
+            elapsed_minutes = elapsed_time / 60
+
+            self.llm.manage_conversation_tokens(logger, episode_num, elapsed_minutes)
+
+            # Call LLM
+            response_content = self.llm.call(current_prompt)
+            self.llm.add_to_conversation(current_prompt, response_content)
+
+            # Count tokens
+            total_tokens = self.llm.count_tokens(
+                [
+                    {"role": "user", "content": current_prompt},
+                    {"role": "assistant", "content": response_content},
+                ]
+            )
+            input_tokens = self.llm.count_tokens([{"role": "user", "content": current_prompt}])
+            output_tokens = self.llm.count_tokens(
+                [{"role": "assistant", "content": response_content}]
+            )
+
+            response = {
+                "content": response_content,
+                "metadata": {
+                    "model": self.llm.model_name,
+                    "success": True,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                },
+                "tokens_used": total_tokens,
+            }
+
+            # Log response
+            if episode_task_logger:
+                episode_task_logger.log_response(response)
+                episode_task_logger.log_agent_action(
+                    "response",
+                    {
+                        "step": episode_num,
+                        "content_preview": response.get("content", "")[:200],
+                        "tokens": response.get("tokens_used", 0),
+                    },
+                )
+
+            # Track token usage
+            response_tokens = response.get("tokens_used", 0)
+            if response_tokens > 0:
+                self.llm.log_token_usage(step_num - 1, response_tokens)
+
+                token_status = self.llm.get_conversation_status()
+                usage_percentage = (token_status["current_tokens"] / token_status["limit"]) * 100
+                if logger and usage_percentage > 80:
+                    logger._log(f"High token usage warning: {usage_percentage:.1f}% of limit")
+
+            # Execute tools
+            logs = []  # Local logs for this step
+            tool_results = tool_executor.parse_and_execute_tools(response.get("content", ""), logs)
+
+            if episode_task_logger and tool_results:
+                for tool_result in tool_results:
+                    episode_task_logger.log_tool_execution(
+                        tool_result["tool"],
+                        tool_result["call"],
+                        tool_result["result"],
+                    )
+
+            # Record step
+            step_data = {
+                "step_number": episode_num,
+                "agent_response": response,
+                "tool_calls": tool_results,
+                "timestamp": datetime.now().isoformat(),
+            }
+            steps.append(step_data)
+
+            if episode_task_logger:
+                episode_task_logger.finalize()
+
+            # Build next prompt
+            terminal_content = terminal_manager.capture_current_state(tool_executor)
+            todo_list_text = tool_executor.get_todo_list_text()
+            current_prompt = build_episode_prompt(
+                step_num, initial_prompt, terminal_content, todo_list_text
+            )
+
+            # Check for completion
+            if self.check_completion_indication(response.get("content", "")):
+                if task_logger:
+                    task_logger.log_agent_action(
+                        "completion",
+                        {
+                            "step": step_num - 1,
+                            "reason": "explicit_completion",
+                        },
+                    )
+                break
+
+        print("Agent completed.")
+
+    def _post_execution_evaluation(
+        self,
+        docker_manager,
+        git_ready,
+        task_logger,
+        tool_executor,
+        terminal_manager,
+        trial_number,
+        start_time,
+        steps,
+        task_context,
+        working_dir,
+        setup_metadata,
+        logger,
+        execution,
+    ):
+        """
+        Handle post-execution tasks: capture artifacts, evaluate, log results.
+
+        Returns:
+            TaskExecution: The updated execution object
+        """
+        # Capture post-agent terminal state
+        terminal_manager.capture_pane_safely(tool_executor, task_logger, "post-agent.txt")
+
+        # Capture git patch if git is ready
+        if git_ready and task_logger:
+            _capture_agent_patch(docker_manager, task_logger, repo_path="/app")
+
+        # Run evaluation
+        if logger:
+            logger._log("Running task evaluation")
+        evaluator = TaskEvaluator()
+        evaluation_result = evaluator.evaluate_execution(
+            execution,
+            task_context.task_dir,
+            working_dir,
+            max_test_timeout=task_context.max_test_timeout_sec,
+            docker_manager=docker_manager,
+        )
+
+        # Save test results
+        if task_logger:
+            test_results_path = task_logger.log_dir / "test_results.json"
+            try:
+                test_results_payload = {
+                    "task_id": task_context.task_id,
+                    "trial_number": trial_number,
+                    "passed": evaluation_result.get("passed", False),
+                    "status": evaluation_result.get(
+                        "status", "error"
+                    ),  # "passed", "failed", or "error"
+                    "test_output": evaluation_result.get("test_output"),
+                    "evaluation": evaluation_result,
+                    "timestamp": datetime.now().isoformat(),
+                }
+                test_results_path.write_text(
+                    json.dumps(test_results_payload, indent=2, default=str)
+                )
+                task_logger._log(f"Saved test_results.json to {test_results_path}")
+            except Exception as e:
+                task_logger._log(f"Failed to write test_results.json: {e}")
+
+        if task_logger:
+            task_logger.log_evaluation_result(evaluation_result)
+
+        # Capture post-test artifacts
+        terminal_manager.capture_pane_safely(tool_executor, task_logger, "post-test.txt")
+        terminal_manager.copy_session_logs_safely(tool_executor, task_logger, "agent")
+
+        # Update execution with evaluation results
+        execution.metadata["evaluation"] = evaluation_result
+        execution.metadata["test_passed"] = evaluation_result.get("passed", False)
+
+        if not evaluation_result.get("passed", False):
+            execution.status = ExecutionStatus.FAILED
+            execution.error_message = (
+                f"Tests failed: {evaluation_result.get('test_output', 'No output')}"
+            )
+
+        # Log final status
+        test_passed = evaluation_result.get("passed", False)
+        status_text = "PASS" if test_passed else "FAIL"
+        evaluation_message = f"[{status_text}] Evaluation complete. Tests passed: {test_passed}"
+
+        print(evaluation_message)
+        if logger:
+            logger._log(evaluation_message)
+
+        if task_logger:
+            task_logger.end_episode(execution.status.value)
+
+        return execution
+
+    def run_single_trial(
+        self,
+        task_context: TaskContext,
+        trial_number: int,
+        working_dir: Path | None = None,
+    ) -> TaskExecution:
+        """
+        Run a single trial with multiple steps.
+
+        Args:
+            task_context: Task context with instructions and files
+            trial_number: Trial number (1-based)
+            working_dir: Optional working directory (creates temp if None)
+
+        Returns:
+            TaskExecution result
+        """
+        start_time = datetime.now()
+        logs = []
+        steps = []
+
+        # Determine max timeout
+        max_timeout = float(task_context.timeout)
+        if (
+            hasattr(task_context, "max_agent_timeout_sec")
+            and task_context.max_agent_timeout_sec is not None
+        ):
+            max_timeout = float(task_context.max_agent_timeout_sec)
+
+        # Setup environment
+        working_dir, setup_metadata = setup_task_environment(
+            task_context, working_dir, use_docker=True
+        )
+
+        docker_ctx = docker_environment(
+            task_context,
+            working_dir,
+            sessions_logs_path=working_dir / "sessions",
+            agent_logs_path=working_dir / "agent-logs",
+        )
+
+        # Get logger
+        logger = get_logger()
+        task_logger = None
+        if logger:
+            if task_context.task_id not in logger.task_loggers:
+                task_logger = logger.create_task_logger(task_context.task_id)
+            else:
+                task_logger = logger.task_loggers[task_context.task_id]
+
+        try:
+            # Phase 1: Setup Docker environment
+            docker_manager = self._setup_docker_environment(
+                task_context, max_timeout, docker_ctx, logger, task_logger
+            )
+
+            # Phase 2: Setup git and MCP configuration
+            git_ready = self._setup_git_and_mcp(docker_manager, task_context, logger, task_logger)
+
+            # Phase 3: Initialize tools and terminal manager
+            tool_executor = ToolExecutor(
+                working_dir,
+                docker_manager=docker_manager,
+                todo_tool_enabled=self.todo_tool_enabled,
+            )
+
+            terminal_manager = TerminalSessionManager(docker_manager.container)
+
+            initial_prompt = self._initialize_tools_and_prompt(
+                working_dir,
+                docker_manager,
+                task_context,
+                tool_executor,
+                terminal_manager,
+                task_logger,
+                max_timeout,
+            )
+
+            # Phase 4: Execute main agent loop
+            self._execute_agent_loop(
+                task_context,
+                max_timeout,
+                start_time,
+                initial_prompt,
+                tool_executor,
+                terminal_manager,
+                logger,
+                task_logger,
+                steps,
+            )
+
+            # Phase 5: Create execution result
+            execution_time = (datetime.now() - start_time).total_seconds()
+            max_memory = self.calculate_max_memory(steps) if self.monitor_memory else None
+
+            final_response = {
+                "content": steps[-1]["agent_response"].get("content", "") if steps else "",
+                "steps": steps,
+                "total_steps": len(steps),
+                "conversation_history": self.llm.conversation_history,
+            }
+
+            execution = TaskExecution(
+                trial_number=trial_number,
+                status=ExecutionStatus.COMPLETED,
+                agent_response=final_response,
+                execution_time=execution_time,
+                memory_used=max_memory,
+                logs=logs,
+                metadata={
+                    "working_dir": str(working_dir),
+                    "setup_metadata": setup_metadata.model_dump(),
+                    "multi_step": True,
+                    "max_steps": self.max_steps,
+                    "steps_taken": len(steps),
+                },
+                started_at=start_time,
+                completed_at=datetime.now(),
+            )
+
+            # Phase 6: Post-execution evaluation
+            execution = self._post_execution_evaluation(
+                docker_manager,
+                git_ready,
+                task_logger,
+                tool_executor,
+                terminal_manager,
+                trial_number,
+                start_time,
+                steps,
+                task_context,
+                working_dir,
+                setup_metadata,
+                logger,
+                execution,
+            )
+
+            return execution
+
+        except ContextLengthExceededError as e:
+            return TaskExecution(
+                trial_number=trial_number,
+                status=ExecutionStatus.FAILED,
+                error_message=f"Context length exceeded: {str(e)}",
+                execution_time=(datetime.now() - start_time).total_seconds(),
+                logs=logs,
+                metadata={
+                    "working_dir": str(working_dir),
+                    "error_type": "ContextLengthExceededError",
+                    "failure_mode": "context_length_exceeded",
+                    "steps_completed": len(steps) if "steps" in locals() else 0,
+                    "token_usage": self.llm.get_conversation_status(),
+                },
+                started_at=start_time,
+                completed_at=datetime.now(),
+            )
+
+        except ConversationTooLongError as e:
+            return TaskExecution(
+                trial_number=trial_number,
+                status=ExecutionStatus.FAILED,
+                error_message=f"Conversation too long: {str(e)}",
+                execution_time=(datetime.now() - start_time).total_seconds(),
+                logs=logs,
+                metadata={
+                    "working_dir": str(working_dir),
+                    "error_type": "ConversationTooLongError",
+                    "failure_mode": "conversation_too_long",
+                    "steps_completed": len(steps) if "steps" in locals() else 0,
+                    "token_usage": self.llm.get_conversation_status(),
+                },
+                started_at=start_time,
+                completed_at=datetime.now(),
+            )
+
+        except Exception as e:
+            return TaskExecution(
+                trial_number=trial_number,
+                status=ExecutionStatus.FAILED,
+                error_message=str(e),
+                execution_time=(datetime.now() - start_time).total_seconds(),
+                logs=logs,
+                metadata={
+                    "working_dir": str(working_dir),
+                    "error_type": type(e).__name__,
+                    "failure_mode": "unknown_error",
+                    "steps_completed": len(steps) if "steps" in locals() else 0,
+                    "token_usage": self.llm.get_conversation_status(),
+                },
+                started_at=start_time,
+                completed_at=datetime.now(),
+            )
+        finally:
+            if "tool_executor" in locals() and tool_executor:
+                try:
+                    tool_executor.cleanup()
+                except Exception as e:
+                    if "logs" in locals() and logs:
+                        logs.append(f"Error cleaning up tools: {e}")
+
+            if "docker_ctx" in locals() and docker_ctx:
+                try:
+                    time.sleep(0.5)
+                    docker_ctx.__exit__(None, None, None)
+                    if "logger" in locals() and logger:
+                        container_name = "unknown"
+                        if (
+                            "docker_manager" in locals()
+                            and docker_manager
+                            and hasattr(docker_manager, "_container_name")
+                        ):
+                            container_name = docker_manager._container_name
+                        logger._log(f"Running docker compose command: docker compose down")
+                except Exception as e:
+                    if "logs" in locals() and logs:
+                        logs.append(f"Error cleaning up Docker: {e}")
+
+            cleanup_environment(working_dir, setup_metadata, preserve_logs=True)
