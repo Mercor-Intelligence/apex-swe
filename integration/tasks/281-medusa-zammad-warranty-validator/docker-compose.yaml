@@ -1,0 +1,193 @@
+services:
+  client:
+    build:
+      context: ..
+      dockerfile: 281-medusa-zammad-warranty-validator/Dockerfile
+    image: ${APEX_TASK_DOCKER_CLIENT_IMAGE_NAME}
+    container_name: ${APEX_TASK_DOCKER_CLIENT_CONTAINER_NAME}
+    command: ["sh", "-c", "sleep infinity"]
+    environment:
+      - TEST_DIR=${APEX_TEST_DIR}
+      # PostgreSQL configuration
+      - POSTGRES_USER=testuser
+      - POSTGRES_PASSWORD=testpass
+      - POSTGRES_DB=testdb
+      - POSTGRES_HOST=127.0.0.1
+      - POSTGRES_PORT=5432
+      - DATABASE_URL=postgresql://testuser:testpass@127.0.0.1:5432/testdb
+      - IS_MATTERMOST_AVAILABLE=false
+    networks:
+      demo-network:
+        aliases:
+          - client
+    volumes:
+      - ${APEX_TASK_LOGS_PATH}:${APEX_CONTAINER_LOGS_PATH}
+      - ${APEX_TASK_AGENT_LOGS_PATH}:${APEX_CONTAINER_AGENT_LOGS_PATH}
+      # Mount config and MCP servers for agent access
+      - task-config:/config
+    tmpfs:
+      # In-memory PostgreSQL data directory (2GB)
+      - /tmp/postgres-data:rw,size=2g
+    ports:
+      - "5432" # PostgreSQL (Docker auto-assigns host port)
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -p 5432 -U testuser && echo 'PostgreSQL READY' || { echo 'PostgreSQL not ready'; exit 1; }",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+
+
+  plane-api:
+    container_name: ${APEX_TASK_DOCKER_CLIENT_CONTAINER_NAME}-plane
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${PLANE_IMAGE_TAG}
+    restart: unless-stopped
+    ports:
+      # Expose API on random port (Docker auto-assigns to avoid conflicts)
+      - "8000"
+    networks:
+      demo-network:
+        aliases:
+          - plane-api
+    env_file:
+      - ../shared/config/plane/.env.lightweight
+    volumes:
+      # Mount config directory for MCP configuration updates
+      - task-config:/config
+      # Mount data directory for GitHub issues and PRs
+      - ./data:/data
+      # Mount MCP servers for building and execution
+      - ../shared/mcp-servers:/app/mcp-servers
+    tmpfs:
+      # In-memory PostgreSQL data directory (4GB)
+      - /tmp/postgres-data:rw,size=4g
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # Increased for PostgreSQL installation and startup
+    labels:
+      - "group=plane"
+      - "category=backend"
+
+  zammad:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${ZAMMAD_IMAGE_TAG}
+    container_name: ${APEX_TASK_DOCKER_CLIENT_CONTAINER_NAME}-zammad
+    ports:
+      - "8080" # Zammad web interface (Docker auto-assigns host port)
+    networks:
+      demo-network:
+        aliases:
+          - zammad
+    # In-memory volumes (ephemeral)
+    tmpfs:
+      - /opt/zammad/storage:rw,size=2g
+      - /var/lib/postgresql/data:rw,size=2g
+    volumes:
+      # Mount config directory for MCP configuration updates
+      - task-config:/config
+      # Mount data directory for GitHub issues and PRs
+      - ./data:/data
+    shm_size: 2g
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -f http://127.0.0.1:8080/ || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 150s # Zammad needs time for PostgreSQL setup and initialization
+
+  medusa:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${MEDUSA_IMAGE_TAG}
+    container_name: ${APEX_TASK_DOCKER_CLIENT_CONTAINER_NAME}-medusa
+    environment:
+      # tweak as you like; these get picked up by start.sh
+      NODE_ENV: development
+      POSTGRES_DB: medusa-store
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/medusa-store
+      REDIS_URL: redis://localhost:6379
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: supersecret
+    networks:
+      demo-network:
+        aliases:
+          - medusa
+    volumes:
+      # Mount config directory for MCP configuration updates
+      - task-config:/config
+      # Mount data directory for Medusa data
+      - ./data:/data
+    ports:
+      - "9000"   # Medusa
+    tmpfs:
+      - /var/lib/postgresql/data:rw,size=2g
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -f http://127.0.0.1:9000/health || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 180s
+
+  mattermost:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${MATTERMOST_IMAGE_TAG}
+    container_name: ${APEX_TASK_DOCKER_CLIENT_CONTAINER_NAME}-mattermost
+    ports:
+      - "8065"
+    networks:
+      demo-network:
+        aliases:
+          - mattermost-server
+    environment:
+      # Embedded PostgreSQL configuration for lightweight mode
+      - MM_SQLSETTINGS_DRIVERNAME=postgres
+      - MM_SQLSETTINGS_DATASOURCE=postgres://mattermost:mattermost@localhost:5433/mattermost?sslmode=disable&connect_timeout=10
+      - MM_SERVICESETTINGS_SITEURL=http://localhost:8065
+      - MM_SERVICESETTINGS_LISTENADDRESS=:8065
+      - MM_SERVICESETTINGS_ENABLEDEVELOPER=true
+      - MM_SERVICESETTINGS_ENABLEUSERACCESSTOKENS=true
+      - MM_EMAILSETTINGS_SENDEMAILNOTIFICATIONS=false
+    volumes:
+      - mattermost_data:/mattermost/data
+      - mattermost_logs:/mattermost/logs
+      - mattermost_config:/mattermost/config
+      - mattermost_plugins:/mattermost/plugins
+      # Mount data directory for Discord messages
+      - ./data:/data
+      # Mount config directory for MCP configuration updates
+      - task-config:/config
+      # Mount MCP servers for building and execution
+      - ../shared/mcp-servers:/app/mcp-servers
+    tmpfs:
+      # In-memory PostgreSQL data directory for Mattermost (2GB)
+      - /tmp/mattermost-postgres-data:rw,size=2g
+    restart: unless-stopped
+    labels:
+      - "group=mattermost"
+      - "category=communication"
+
+volumes:
+  task-config:
+  mattermost_config:
+  mattermost_data:
+  mattermost_logs:
+  mattermost_plugins:
+
+networks:
+  demo-network:
+    driver: bridge

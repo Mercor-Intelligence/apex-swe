@@ -1,0 +1,142 @@
+services:
+  client:
+    build:
+      context: ..
+      dockerfile: 234-medusa-abandoned-cart/Dockerfile
+    image: ${APEX_TASK_DOCKER_CLIENT_IMAGE_NAME}
+    container_name: ${APEX_TASK_DOCKER_CLIENT_CONTAINER_NAME}
+    command:
+    - sh
+    - -c
+    - sleep infinity
+    environment:
+    - TEST_DIR=${APEX_TEST_DIR}
+    - POSTGRES_USER=testuser
+    - POSTGRES_PASSWORD=testpass
+    - POSTGRES_DB=testdb
+    - POSTGRES_HOST=127.0.0.1
+    - POSTGRES_PORT=5432
+    - DATABASE_URL=postgresql://testuser:testpass@127.0.0.1:5432/testdb
+    - IS_MATTERMOST_AVAILABLE=false
+    networks:
+      demo-network:
+        aliases:
+        - client
+    volumes:
+    - ${APEX_TASK_LOGS_PATH}:${APEX_CONTAINER_LOGS_PATH}
+    - ${APEX_TASK_AGENT_LOGS_PATH}:${APEX_CONTAINER_AGENT_LOGS_PATH}
+    - task-config:/config
+    tmpfs:
+    - /tmp/postgres-data:rw,size=2g
+    ports:
+    - '5432'
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -h 127.0.0.1 -p 5432 -U testuser && echo 'PostgreSQL READY' ||
+        { echo 'PostgreSQL not ready'; exit 1; }
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+  plane-api:
+    container_name: ${APEX_TASK_DOCKER_CLIENT_CONTAINER_NAME}-plane
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${PLANE_IMAGE_TAG}
+    restart: unless-stopped
+    ports:
+    - '8000'
+    networks:
+      demo-network:
+        aliases:
+        - plane-api
+    env_file:
+    - ../shared/config/plane/.env.lightweight
+    volumes:
+    - task-config:/config
+    - ./data:/data
+    - ../shared/mcp-servers:/app/mcp-servers
+    tmpfs:
+    - /tmp/postgres-data:rw,size=4g
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --quiet
+      - --tries=1
+      - --spider
+      - http://127.0.0.1:8000/
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    labels:
+    - group=plane
+    - category=backend
+  medusa:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${MEDUSA_IMAGE_TAG}
+    container_name: ${APEX_TASK_DOCKER_CLIENT_CONTAINER_NAME}-medusa
+    environment:
+      NODE_ENV: development
+      POSTGRES_DB: medusa-store
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/medusa-store
+      REDIS_URL: redis://localhost:6379
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: supersecret
+    networks:
+      demo-network:
+        aliases:
+        - medusa
+    volumes:
+    - task-config:/config
+    - ./data:/data
+    ports:
+    - '9000'
+    tmpfs:
+    - /var/lib/postgresql/data:rw,size=2g
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - curl -f http://127.0.0.1:9000/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: ${APEX_TASK_DOCKER_CLIENT_CONTAINER_NAME}-mailhog
+    command:
+    - -smtp-bind-addr
+    - 0.0.0.0:1025
+    - -api-bind-addr
+    - 0.0.0.0:8025
+    - -ui-bind-addr
+    - 0.0.0.0:8025
+    ports:
+    - '1025'
+    - '8025'
+    networks:
+      demo-network:
+        aliases:
+        - mailhog
+    restart: unless-stopped
+    environment:
+    - MH_HOSTNAME=mailhog.example.com
+    - MH_STORAGE=memory
+    labels:
+    - group=mailhog
+    - category=email
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget --quiet --tries=1 --spider http://127.0.0.1:8025/ || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+volumes:
+  task-config: null
+networks:
+  demo-network:
+    driver: bridge

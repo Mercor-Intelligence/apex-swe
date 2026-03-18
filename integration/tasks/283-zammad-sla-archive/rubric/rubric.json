@@ -1,0 +1,248 @@
+{
+  "correctness": [
+    {
+      "id": "correctness-f2p-1",
+      "description": "Test `test_script_exists` passes: Verify SLA archive script exists",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_script_exists`",
+      "test_id": "test_script_exists",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-2",
+      "description": "Test `test_sla_config_exists` passes: Verify SLA config file exists",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_sla_config_exists`",
+      "test_id": "test_sla_config_exists",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-3",
+      "description": "Test `test_execution_succeeds` passes: Verify script executes without errors",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_execution_succeeds`",
+      "test_id": "test_execution_succeeds",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-4",
+      "description": "Test `test_output_format_exact` passes: Verify output format is exact - STRICT like Task 200",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_output_format_exact`",
+      "test_id": "test_output_format_exact",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-5",
+      "description": "Test `test_zammad_ticket_fetching` passes: Verify Zammad tickets are fetched - STRICT with retries",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_zammad_ticket_fetching`",
+      "test_id": "test_zammad_ticket_fetching",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-6",
+      "description": "Test `test_s3_upload_comprehensive` passes: Verify CSV is uploaded to S3 - STRICT",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_s3_upload_comprehensive`",
+      "test_id": "test_s3_upload_comprehensive",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-7",
+      "description": "Test `test_csv_structure` passes: Verify CSV has correct structure",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_csv_structure`",
+      "test_id": "test_csv_structure",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-8",
+      "description": "Test `test_sla_calculation_logic` passes: Verify SLA calculation logic is correct",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_sla_calculation_logic`",
+      "test_id": "test_sla_calculation_logic",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-9",
+      "description": "Test `test_handles_no_tickets` passes: Verify script handles case with no tickets gracefully",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_handles_no_tickets`",
+      "test_id": "test_handles_no_tickets",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-10",
+      "description": "Test `test_cross_service_consistency` passes: Verify output matches S3 records - STRICT",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_cross_service_consistency`",
+      "test_id": "test_cross_service_consistency",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-11",
+      "description": "Test `test_idempotent_uploads` passes: Verify script can be run multiple times (overwrites S3 file)",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_idempotent_uploads`",
+      "test_id": "test_idempotent_uploads",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-12",
+      "description": "Test `test_sla_config_loaded` passes: Verify SLA configuration is loaded correctly",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_sla_config_loaded`",
+      "test_id": "test_sla_config_loaded",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-13",
+      "description": "Test `test_complete_workflow_execution` passes: Verify complete workflow from Zammad to S3",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_complete_workflow_execution`",
+      "test_id": "test_complete_workflow_execution",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-14",
+      "description": "Test `test_date_format_in_filename` passes: Verify S3 filename uses correct date format",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_date_format_in_filename`",
+      "test_id": "test_date_format_in_filename",
+      "test_type": "fail_to_pass"
+    }
+  ],
+  "functional": [
+    {
+      "id": "functional-1",
+      "description": "The solution uses the Zammad API endpoint 'http://localhost:8080' (or 'http://zammad:8080')",
+      "weight": "major",
+      "rationale": "Ensures the solution connects to the correct Zammad instance",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-2",
+      "description": "The solution authenticates with Zammad using the required credentials or API token",
+      "weight": "major",
+      "rationale": "Authentication is required for API access",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-3",
+      "description": "The solution uses the correct API operations for Zammad",
+      "weight": "major",
+      "rationale": "Using correct API operations ensures task completion",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ],
+  "robustness": [
+    {
+      "id": "robustness-1",
+      "description": "The solution handles tickets with missing priority fields by defaulting to priority '2' for SLA target lookup.",
+      "weight": "minor",
+      "rationale": "Ensures all tickets can be processed for SLA calculations even when priority data is incomplete, preventing data loss due to missing metadata.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-2",
+      "description": "The solution handles CSV write failures by logging the error to stderr but still attempting to print the summary output.",
+      "weight": "minor",
+      "rationale": "Ensures operators receive processing statistics even when file system issues prevent CSV creation, maintaining visibility into the operation.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-3",
+      "description": "The solution handles missing or malformed timestamp fields (created_at, closed_at, updated_at, updatedAt) without crashing by skipping affected tickets.",
+      "weight": "major",
+      "rationale": "Ensures the solution continues processing valid tickets even when encountering data quality issues, preventing complete failure due to individual malformed records.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-4",
+      "description": "The solution logs errors to stderr when encountering missing or malformed timestamp fields.",
+      "weight": "minor",
+      "rationale": "Provides visibility into data quality issues for operators to investigate and address upstream problems.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-5",
+      "description": "The solution handles Zammad API failures by returning an empty ticket list and continuing to produce output with zero tickets.",
+      "weight": "major",
+      "rationale": "Ensures the solution completes successfully even when the Zammad service is unavailable, maintaining operational continuity and preventing cascading failures.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-6",
+      "description": "The solution logs errors to stderr when the Zammad API fails.",
+      "weight": "minor",
+      "rationale": "Provides visibility into service availability issues for operators to investigate and address connectivity or service problems.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-7",
+      "description": "The solution handles missing SLA configuration by using default values and continuing with SLA calculations.",
+      "weight": "major",
+      "rationale": "Ensures the solution can operate even when configuration is unavailable, preventing complete failure.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-8",
+      "description": "The solution logs a warning to stderr when SLA configuration is missing.",
+      "weight": "minor",
+      "rationale": "Alerts operators to the degraded state so they can restore proper configuration.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-9",
+      "description": "The solution prints the summary output even when S3 upload fails.",
+      "weight": "major",
+      "rationale": "Ensures the solution reports processing results even when storage fails, allowing operators to be aware of the data while investigating storage issues separately.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-10",
+      "description": "The solution exits with code 0 even when S3 upload fails.",
+      "weight": "major",
+      "rationale": "Indicates successful data processing despite storage failure, preventing false alarms in monitoring systems for the core processing logic.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-11",
+      "description": "The solution logs errors to stderr when S3 upload fails.",
+      "weight": "minor",
+      "rationale": "Provides visibility into storage issues for operators to investigate and address S3 connectivity or permission problems.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-12",
+      "description": "The solution handles both list and nested response formats from the Zammad API when retrieving tickets.",
+      "weight": "minor",
+      "rationale": "Ensures compatibility with different API response structures, preventing failures due to API version changes or configuration differences.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-13",
+      "description": "The solution uses UTC timezone for all timestamp parsing and time window calculations.",
+      "weight": "major",
+      "rationale": "Ensures consistent time-based filtering across different server timezones, preventing incorrect inclusion or exclusion of tickets due to timezone mismatches.",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ]
+}

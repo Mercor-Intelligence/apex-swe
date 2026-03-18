@@ -1,0 +1,96 @@
+{
+  "correctness": [
+    {
+      "id": "correctness-f2p-1",
+      "description": "Test `test_mattermost_report_posted` passes: Verify that a duplicate detection report was posted to Mattermost.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_mattermost_report_posted`",
+      "test_id": "test_mattermost_report_posted",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-2",
+      "description": "Test `test_duplicates_correctly_identified` passes: Verify that all duplicates are correctly identified and reported.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_duplicates_correctly_identified`",
+      "test_id": "test_duplicates_correctly_identified",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-3",
+      "description": "Test `test_report_format_correct` passes: Verify that the report message is formatted correctly.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_report_format_correct`",
+      "test_id": "test_report_format_correct",
+      "test_type": "fail_to_pass"
+    }
+  ],
+  "functional": [
+    {
+      "id": "functional-1",
+      "description": "The solution uses the EspoCRM API endpoint 'http://localhost:80' (or 'http://espocrm:80')",
+      "weight": "major",
+      "rationale": "Ensures the solution connects to the correct EspoCRM instance",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-2",
+      "description": "The solution uses the Mattermost API endpoint 'http://localhost:8065' (or 'http://mattermost:8065')",
+      "weight": "major",
+      "rationale": "Ensures the solution connects to the correct Mattermost instance",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-3",
+      "description": "The solution authenticates with both EspoCRM and Mattermost using the required credentials",
+      "weight": "major",
+      "rationale": "Authentication is required for API access",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-4",
+      "description": "The solution identifies contacts with identical email addresses and reports them",
+      "weight": "major",
+      "rationale": "Duplicate detection logic is the core functional requirement.",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ],
+  "robustness": [
+    {
+      "id": "robustness-1",
+      "description": "The solution verifies that the 'data-quality' channel exists in Mattermost, or handles its absence",
+      "weight": "major",
+      "rationale": "Prevents posting failures if the target channel is missing.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-2",
+      "description": "The solution handles cases where no duplicates are found by sending a 'no duplicates' message or exiting cleanly",
+      "weight": "minor",
+      "rationale": "Provides clarity on system status when data is clean.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-3",
+      "description": "The solution normalizes email addresses (e.g., trimming whitespace) before comparing for duplicates",
+      "weight": "minor",
+      "rationale": "Ensures accurate duplicate detection despite data entry errors.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-4",
+      "description": "The solution handles API errors from either service gracefully",
+      "weight": "major",
+      "rationale": "Prevents crashes if one service is unavailable.",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ]
+}

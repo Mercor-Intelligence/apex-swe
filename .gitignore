@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Virtual environment
+venv/
+.venv/
+
+# Run outputs
+integration/runs/
+runs/
+
+# Logs
+*.log
+
+# Node modules (MCP servers build these inside Docker)
+node_modules/
+
+# Docker artifacts
+*.tar
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment / secrets
+.env
+*.pem
+
+# Temp files
+*.tmp

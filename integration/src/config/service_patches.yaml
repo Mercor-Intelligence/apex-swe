@@ -1,0 +1,35 @@
+# Service Patch Configurations
+# 
+# This file defines services that require entrypoint patching before Docker builds.
+# To add a new service, add a new entry following this structure:
+#
+# service_name:
+#   image_tag: "image-tag-from-ecr"           # The ECR image tag
+#   entrypoint_script: "docker-entrypoint-xxx.sh"  # Script in tasks/shared/dockerfiles/
+#   patch_label: "apex_xxx_entrypoint_patch"  # Docker label to track patch state
+#   compose_env_var: "${XXX_IMAGE_TAG}"       # Env var pattern used in docker-compose.yaml
+
+plane:
+  image_tag: "plane-api"
+  entrypoint_script: "docker-entrypoint-api-lightweight.sh"
+  patch_label: "apex_plane_entrypoint_patch"
+  compose_env_var: "${PLANE_IMAGE_TAG}"
+
+mattermost:
+  image_tag: "mattermost-lightweight"
+  entrypoint_script: "docker-entrypoint-mattermost-lightweight.sh"
+  patch_label: "apex_mattermost_entrypoint_patch"
+  compose_env_var: "${MATTERMOST_IMAGE_TAG}"
+
+medusa:
+  image_tag: "medusa-lightweight"
+  entrypoint_script: "docker-entrypoint-medusa-lightweight.sh"
+  patch_label: "apex_medusa_entrypoint_patch"
+  compose_env_var: "${MEDUSA_IMAGE_TAG}"
+
+espocrm:
+  image_tag: "espocrm"
+  entrypoint_script: "docker-entrypoint-espocrm-lightweight.sh"
+  patch_label: "apex_espocrm_entrypoint_patch"
+  compose_env_var: "${ESPOCRM_IMAGE_TAG}"
+

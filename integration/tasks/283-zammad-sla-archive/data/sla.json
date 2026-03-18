@@ -1,0 +1,19 @@
+{
+  "targets": {
+    "1": {
+      "name": "low",
+      "first_response_minutes": 480,
+      "resolution_minutes": 2880
+    },
+    "2": {
+      "name": "normal",
+      "first_response_minutes": 240,
+      "resolution_minutes": 1440
+    },
+    "3": {
+      "name": "high",
+      "first_response_minutes": 60,
+      "resolution_minutes": 480
+    }
+  }
+}

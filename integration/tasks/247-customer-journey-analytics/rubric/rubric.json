@@ -1,0 +1,144 @@
+{
+  "correctness": [
+    {
+      "id": "correctness-f2p-1",
+      "description": "Test `test_script_exists` passes: Test 1: Verify script exists at expected location.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_script_exists`",
+      "test_id": "test_script_exists",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-2",
+      "description": "Test `test_script_execution_succeeds` passes: Test 2: Verify script executes without errors.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_script_execution_succeeds`",
+      "test_id": "test_script_execution_succeeds",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-3",
+      "description": "Test `test_report_uploaded_to_s3` passes: Test 3: Verify analytics report uploaded to S3.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_report_uploaded_to_s3`",
+      "test_id": "test_report_uploaded_to_s3",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-4",
+      "description": "Test `test_health_score_calculation` passes: Test 4: Verify health score calculation logic is correct.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_health_score_calculation`",
+      "test_id": "test_health_score_calculation",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-5",
+      "description": "Test `test_all_customers_included` passes: Test 5: Verify all customers from all sources are included in report.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_all_customers_included`",
+      "test_id": "test_all_customers_included",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-6",
+      "description": "Test `test_mattermost_insights_posted` passes: Test 6: Verify insights posted to Mattermost customer-success channel.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_mattermost_insights_posted`",
+      "test_id": "test_mattermost_insights_posted",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-7",
+      "description": "Test `test_output_format` passes: Test 7: Verify script output format is correct.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_output_format`",
+      "test_id": "test_output_format",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-8",
+      "description": "Test `test_handles_no_customers_gracefully` passes: Test 8: Verify script handles zero customers gracefully.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_handles_no_customers_gracefully`",
+      "test_id": "test_handles_no_customers_gracefully",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-9",
+      "description": "Test `test_summary_statistics_accuracy` passes: Test 9: Verify summary statistics are correctly calculated.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_summary_statistics_accuracy`",
+      "test_id": "test_summary_statistics_accuracy",
+      "test_type": "fail_to_pass"
+    }
+  ],
+  "functional": [
+    {
+      "id": "functional-1",
+      "description": "The solution connects to Medusa, Zammad, and EspoCRM using their respective API endpoints",
+      "weight": "major",
+      "rationale": "Connecting to all data sources is the core requirement for cross-platform analytics.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-2",
+      "description": "The solution authenticates with all services using provided credentials or tokens",
+      "weight": "major",
+      "rationale": "Authentication is required for API access to all systems.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-3",
+      "description": "The solution aggregates customer data from all three sources by matching email addresses",
+      "weight": "major",
+      "rationale": "Merging data by a common identifier (email) is essential for journey analytics.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-4",
+      "description": "The solution calculates a health score for each customer based on the defined formula",
+      "weight": "major",
+      "rationale": "Implementing the specific scoring logic is a key functional requirement.",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ],
+  "robustness": [
+    {
+      "id": "robustness-1",
+      "description": "The solution handles missing data in any source by treating it as zero or null rather than failing",
+      "weight": "major",
+      "rationale": "Customers may not exist in all systems; the pipeline must handle sparse data gracefully.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-2",
+      "description": "The solution normalizes email addresses (e.g., lowercase, trim) before matching to ensure accuracy",
+      "weight": "major",
+      "rationale": "Prevents data mismatch due to formatting differences across systems.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-3",
+      "description": "The solution continues processing and generates a partial report even if one data source fails",
+      "weight": "major",
+      "rationale": "Ensures resilience against single-point failures in a multi-service architecture.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-4",
+      "description": "The solution handles negative health scores correctly (allows them or clamps to 0 based on logic)",
+      "weight": "minor",
+      "rationale": "Ensures scoring logic behaves predictably for customers with many negative interactions.",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ]
+}

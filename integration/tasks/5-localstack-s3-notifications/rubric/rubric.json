@@ -1,0 +1,136 @@
+{
+  "correctness": [
+    {
+      "id": "correctness-f2p-1",
+      "description": "Test `test_bucket_created` passes: Test 1: Verify S3 bucket was created\nPurpose: Confirms bucket creation logic worked",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_bucket_created`",
+      "test_id": "test_bucket_created",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-2",
+      "description": "Test `test_sqs_queue_exists` passes: Test 2: Verify prerequisite SQS queue exists\nPurpose: Validates environment setup",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_sqs_queue_exists`",
+      "test_id": "test_sqs_queue_exists",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-3",
+      "description": "Test `test_bucket_notification_to_sqs_configured` passes: Test 3: Verify S3 → SQS notification setup\nPurpose: Validates notification wiring",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_bucket_notification_to_sqs_configured`",
+      "test_id": "test_bucket_notification_to_sqs_configured",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-4",
+      "description": "Test `test_queue_policy_allows_s3` passes: Test 4: Verify SQS queue has policy allowing S3\nPurpose: Ensures permission configuration is correct",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_queue_policy_allows_s3`",
+      "test_id": "test_queue_policy_allows_s3",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-5",
+      "description": "Test `test_file_uploaded_to_correct_location` passes: Test 5: Verify test file was uploaded\nPurpose: Confirms upload step completed",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_file_uploaded_to_correct_location`",
+      "test_id": "test_file_uploaded_to_correct_location",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-6",
+      "description": "Test `test_sqs_message_received` passes: Test 6a: Verify message was processed by checking output file exists\nPurpose: Validates that the solution script successfully processed an SQS message\n\nThis test confirms that at least one message was received and processed.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_sqs_message_received`",
+      "test_id": "test_sqs_message_received",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-7",
+      "description": "Test `test_no_duplicate_messages_in_queue` passes: Test 6b: Verify no duplicate or unprocessed messages remain in queue\nPurpose: Ensures clean message processing without duplicates\n\nAfter the solution runs, the queue should be empty (or only contain test events).\nThis validates that messages are properly consumed and not left in the queue.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_no_duplicate_messages_in_queue`",
+      "test_id": "test_no_duplicate_messages_in_queue",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-8",
+      "description": "Test `test_output_file_created` passes: Test 7: Verify output file was created with event details\nPurpose: Validates message content was correctly extracted and stored",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_output_file_created`",
+      "test_id": "test_output_file_created",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-9",
+      "description": "Test `test_end_to_end_notification_with_new_upload` passes: Test 8: Complete end-to-end validation with a new file upload\nPurpose: Validates that the notification configuration works independently\n\nThis test uploads a new file and verifies a message is received in the queue,\nconfirming that the S3-to-SQS notification pipeline is truly functional\nand not just relying on pre-existing messages.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_end_to_end_notification_with_new_upload`",
+      "test_id": "test_end_to_end_notification_with_new_upload",
+      "test_type": "fail_to_pass"
+    }
+  ],
+  "functional": [
+    {
+      "id": "functional-1",
+      "description": "The solution connects to LocalStack endpoints for both S3 and SQS ('http://localhost:4566')",
+      "weight": "major",
+      "rationale": "Ensures the solution interacts with the local emulation environment instead of production AWS services.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-2",
+      "description": "The solution configures the S3 bucket notification to send events to the specified SQS queue",
+      "weight": "major",
+      "rationale": "Connecting S3 to SQS via notifications is the primary functional requirement.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-3",
+      "description": "The solution sets an SQS access policy allowing 's3:SendMessage' from the source bucket",
+      "weight": "major",
+      "rationale": "Explicit permissions are required for S3 to publish messages to the SQS queue.",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ],
+  "robustness": [
+    {
+      "id": "robustness-1",
+      "description": "The solution checks if the S3 bucket already exists before attempting to create it",
+      "weight": "major",
+      "rationale": "Prevents errors when running the script multiple times (idempotency).",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-2",
+      "description": "The solution explicitly deletes SQS messages after processing",
+      "weight": "major",
+      "rationale": "Failure to delete messages results in them returning to the queue after the visibility timeout, causing duplicate processing.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-3",
+      "description": "The solution uses SQS long polling (WaitTimeSeconds > 0) to efficiently retrieve messages",
+      "weight": "minor",
+      "rationale": "Long polling reduces empty responses and API costs while improving message delivery latency.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-4",
+      "description": "The solution handles or filters unexpected message structures (e.g., S3 TestEvents) gracefully",
+      "weight": "minor",
+      "rationale": "S3 sends a test event upon configuration; the script should not crash or misinterpret this event.",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ]
+}

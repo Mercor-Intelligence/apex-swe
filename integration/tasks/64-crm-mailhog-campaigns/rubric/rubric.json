@@ -1,0 +1,120 @@
+{
+  "correctness": [
+    {
+      "id": "correctness-f2p-1",
+      "description": "Test `test_csv_file_exists` passes: Test 1: Verify CSV file creation at /app/contacts.csv.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_csv_file_exists`",
+      "test_id": "test_csv_file_exists",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-2",
+      "description": "Test `test_csv_has_correct_headers` passes: Test 3: Verify CSV has correct headers (name, email).",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_csv_has_correct_headers`",
+      "test_id": "test_csv_has_correct_headers",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-3",
+      "description": "Test `test_csv_has_10_contacts` passes: Test 2: Verify CSV has exactly 10 contacts (excluding header).",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_csv_has_10_contacts`",
+      "test_id": "test_csv_has_10_contacts",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-4",
+      "description": "Test `test_all_have_email_addresses` passes: Test 4: Verify all contacts have valid email addresses (contain @).",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_all_have_email_addresses`",
+      "test_id": "test_all_have_email_addresses",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-5",
+      "description": "Test `test_contacts_match_crm` passes: Test 5: Verify CSV contacts match the first 10 contacts with emails from CRM.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_contacts_match_crm`",
+      "test_id": "test_contacts_match_crm",
+      "test_type": "fail_to_pass"
+    }
+  ],
+  "functional": [
+    {
+      "id": "functional-1",
+      "description": "The solution uses the EspoCRM API endpoint 'http://localhost:80' (or 'http://espocrm:80')",
+      "weight": "major",
+      "rationale": "Ensures the solution connects to the correct EspoCRM instance",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-2",
+      "description": "The solution exports contacts from EspoCRM to a CSV file",
+      "weight": "major",
+      "rationale": "CRM contact export is the core functionality",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-3",
+      "description": "The solution creates the CSV file with correct headers (name, email)",
+      "weight": "major",
+      "rationale": "CSV format must match expected structure",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ],
+  "robustness": [
+    {
+      "id": "robustness-1",
+      "description": "The solution handles pagination when fetching contacts from the EspoCRM API to ensure all contacts are retrieved before filtering.",
+      "weight": "major",
+      "rationale": "Ensures the solution retrieves the complete dataset from the CRM system, preventing incorrect results when the first 10 contacts with emails are not in the first page of results.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-2",
+      "description": "The solution verifies that the authentication request to EspoCRM returns a successful status code before attempting to fetch contacts.",
+      "weight": "major",
+      "rationale": "Prevents cascading failures by ensuring authentication succeeds before proceeding with data retrieval operations, making failures easier to diagnose.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-3",
+      "description": "The solution verifies that the contact fetch request to EspoCRM returns a successful status code before processing the response data.",
+      "weight": "major",
+      "rationale": "Prevents processing of invalid or error responses, ensuring the solution fails gracefully when the API is unavailable or returns errors.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-4",
+      "description": "The solution trims whitespace from email addresses when filtering to ensure contacts with whitespace-only email fields are excluded.",
+      "weight": "minor",
+      "rationale": "Ensures the filtering logic correctly identifies truly empty email fields versus those containing only whitespace, maintaining data quality in the output.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-5",
+      "description": "The solution handles contacts where the firstName field is missing or null by constructing the full name appropriately.",
+      "weight": "minor",
+      "rationale": "Ensures the solution produces valid output when contact records have missing first names, preventing crashes or malformed CSV entries.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-6",
+      "description": "The solution handles contacts where the lastName field is missing or null by constructing the full name appropriately.",
+      "weight": "minor",
+      "rationale": "Ensures the solution produces valid output when contact records have missing last names, preventing crashes or malformed CSV entries.",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ]
+}

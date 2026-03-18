@@ -1,0 +1,166 @@
+{
+  "correctness": [
+    {
+      "id": "correctness-f2p-1",
+      "description": "Test `test_solution_runs` passes: Test that solution runs successfully.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_solution_runs`",
+      "test_id": "test_solution_runs",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-2",
+      "description": "Test `test_required_lambda_functions_deployed` passes: Test Lambda functions deployed.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_required_lambda_functions_deployed`",
+      "test_id": "test_required_lambda_functions_deployed",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-3",
+      "description": "Test `test_state_machine_deployed_with_correct_name` passes: Test Step Functions state machine deployed.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_state_machine_deployed_with_correct_name`",
+      "test_id": "test_state_machine_deployed_with_correct_name",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-4",
+      "description": "Test `test_execution_succeeded` passes: Test workflow executed.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_execution_succeeded`",
+      "test_id": "test_execution_succeeded",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-5",
+      "description": "Test `test_output_format_matches_requirement` passes: Test output has correct format.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_output_format_matches_requirement`",
+      "test_id": "test_output_format_matches_requirement",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-6",
+      "description": "Test `test_execution_succeeded` passes: Test execution completed successfully.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_execution_succeeded`",
+      "test_id": "test_execution_succeeded",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-7",
+      "description": "Test `test_state_machine_definition_structure` passes: Test the workflow includes risk branching.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_state_machine_definition_structure`",
+      "test_id": "test_state_machine_definition_structure",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-8",
+      "description": "Test `test_required_lambda_functions_deployed` passes: Test all required Lambda functions deployed.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_required_lambda_functions_deployed`",
+      "test_id": "test_required_lambda_functions_deployed",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-9",
+      "description": "Test `test_no_critical_errors` passes: Test no critical errors.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_no_critical_errors`",
+      "test_id": "test_no_critical_errors",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-10",
+      "description": "Test `test_output_format_matches_requirement` passes: Test execution ARN is present/valid in output.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_output_format_matches_requirement`",
+      "test_id": "test_output_format_matches_requirement",
+      "test_type": "fail_to_pass"
+    }
+  ],
+  "functional": [
+    {
+      "id": "functional-1",
+      "description": "The solution connects to LocalStack using the configured endpoint.",
+      "weight": "major",
+      "rationale": "Required to interact with AWS services.",
+      "source": "task-spec",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-2",
+      "description": "The solution deploys Lambda functions for each step of the renewal workflow.",
+      "weight": "major",
+      "rationale": "Required for the serverless logic.",
+      "source": "task-spec",
+      "dependent_on": [
+        "functional-1"
+      ]
+    },
+    {
+      "id": "functional-3",
+      "description": "The solution deploys a Step Functions state machine to orchestrate the workflow.",
+      "weight": "major",
+      "rationale": "Required to coordinate the Lambda functions.",
+      "source": "task-spec",
+      "dependent_on": [
+        "functional-1"
+      ]
+    },
+    {
+      "id": "functional-4",
+      "description": "The solution executes the renewal workflow and waits for completion.",
+      "weight": "major",
+      "rationale": "Verifies the workflow actually runs.",
+      "source": "task-spec",
+      "dependent_on": [
+        "functional-3"
+      ]
+    }
+  ],
+  "robustness": [
+    {
+      "id": "robustness-1",
+      "description": "The solution configures retry logic on State Machine tasks to handle transient failures.",
+      "weight": "major",
+      "rationale": "Improves reliability of the workflow.",
+      "source": "solution",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-2",
+      "description": "The solution handles existing Lambda functions/State Machines during deployment (idempotency).",
+      "weight": "major",
+      "rationale": "Prevents errors when re-running the deployment script.",
+      "source": "solution",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-3",
+      "description": "The solution packages Lambda code correctly (zipping).",
+      "weight": "major",
+      "rationale": "Required for Lambda deployment.",
+      "source": "solution",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-4",
+      "description": "The solution polls for execution completion with a timeout/limit.",
+      "weight": "minor",
+      "rationale": "Prevents the script from hanging indefinitely.",
+      "source": "solution",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-5",
+      "description": "The solution parses the execution output to determine the risk/result.",
+      "weight": "minor",
+      "rationale": "Ensures the result of the workflow is accessible.",
+      "source": "solution",
+      "dependent_on": []
+    }
+  ]
+}

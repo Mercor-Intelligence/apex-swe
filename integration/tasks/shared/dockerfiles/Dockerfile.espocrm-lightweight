@@ -1,0 +1,37 @@
+# Single-container EspoCRM + PostgreSQL (in-memory DB via tmpfs)
+FROM espocrm/espocrm:latest
+
+# Install PostgreSQL server + client tools + jq for JSON processing
+RUN set -eux; \
+    apt-get update; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      postgresql postgresql-client ca-certificates jq curl wget; \
+    rm -rf /var/lib/apt/lists/*
+
+# Defaults (can be overridden at runtime)
+ENV POSTGRES_DATA=/var/lib/postgresql/data \
+    POSTGRES_USER=espocrm \
+    POSTGRES_PASSWORD=espocrm \
+    POSTGRES_DB=espocrm \
+    PG_SHARED_BUFFERS=256MB \
+    ESPOCRM_DATABASE_PLATFORM=Postgresql \
+    ESPOCRM_DATABASE_HOST=127.0.0.1 \
+    ESPOCRM_DATABASE_PORT=5432 \
+    ESPOCRM_DATABASE_USER=espocrm \
+    ESPOCRM_DATABASE_PASSWORD=espocrm \
+    ESPOCRM_DATABASE_NAME=espocrm
+
+# Preserve the original entrypoint before replacing it
+# The espocrm/espocrm image has its own entrypoint we need to keep
+RUN if [ -f /entrypoint.sh ]; then \
+      mv /entrypoint.sh /usr/local/bin/espocrm-original-entrypoint.sh; \
+    elif [ -f /usr/local/bin/docker-entrypoint.sh ]; then \
+      cp /usr/local/bin/docker-entrypoint.sh /usr/local/bin/espocrm-original-entrypoint.sh; \
+    fi
+
+# Add our wrapper entrypoint
+COPY /shared/dockerfiles/docker-entrypoint-espocrm-lightweight.sh /usr/local/bin/docker-entrypoint-espocrm-lightweight.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-espocrm-lightweight.sh
+
+EXPOSE 80
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint-espocrm-lightweight.sh"]

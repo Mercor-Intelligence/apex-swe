@@ -1,0 +1,35 @@
+{
+  "name": "@sgftech/medusa-mcp",
+  "version": "1.0.0",
+  "main": "index.js",
+  "private": "false",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "inspector": "mcp-inspector m",
+    "dev:inspector": "npx @modelcontextprotocol/inspector node dist/index.js"
+  },
+  "keywords": [],
+  "author": {
+    "name": "govind diwakar",
+    "email": "sgf@sourcegoodfood.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SGFGOV/medusa-mcp.git"
+  },
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@medusajs/js-sdk": "2.6.0",
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "dotenv": "^16.4.7",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "typescript": "^5.9.3"
+  }
+}

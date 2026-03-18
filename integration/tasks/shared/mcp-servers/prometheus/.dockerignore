@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+.github
+
+# CI
+.codeclimate.yml
+.travis.yml
+.taskcluster.yml
+
+# Docker
+docker-compose.yml
+.docker
+
+# Byte-compiled / optimized / DLL files
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+**/*.so
+**/.pytest_cache
+**/.coverage
+**/htmlcov
+
+# Virtual environment
+.env
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea
+.vscode
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Config
+.env
+
+# Distribution / packaging
+*.egg-info/

@@ -1,0 +1,58 @@
+{
+    "Token": "change-me",
+    "Users": [
+      {
+        "login": "admin@example.com",
+        "firstname": "Admin",
+        "lastname": "User",
+        "email": "admin@example.com",
+        "organization": "Example Org",
+        "password": "StrongPassw0rd@()"
+      }
+    ],
+    "Organizations": [
+      { "name": "Example Org" }
+    ],
+    "Signatures": [
+      { "id": 1, "name": "default", "body": "\n #{user.firstname} #{user.lastname}\n\n--\n Example Org\n--" }
+    ],
+    "EmailAddresses": [
+      { "id": 1, "channel_id": 10, "name": "Support", "email": "support@example.com" }
+    ],
+    "Channels": [
+      {
+        "id": 10,
+        "area": "Email::Account",
+        "group_id": 1,
+        "options": {
+          "inbound": {
+            "adapter": "imap",
+            "options": {
+              "host": "imap.example.com",
+              "user": "support@example.com",
+              "password": "mail-password",
+              "ssl": true
+            }
+          },
+          "outbound": {
+            "adapter": "smtp",
+            "options": {
+              "host": "smtp.example.com",
+              "user": "support@example.com",
+              "password": "mail-password",
+              "port": 587,
+              "domain": "example.com",
+              "enable_starttls_auto": true
+            }
+          }
+        },
+        "active": true
+      }
+    ],
+    "Settings": [
+      { "name": "product_name", "value": "Example Helpdesk" },
+      { "name": "fqdn", "value": "helpdesk.example.com" },
+      { "name": "system_online_service", "value": true }
+    ]
+  }
+  

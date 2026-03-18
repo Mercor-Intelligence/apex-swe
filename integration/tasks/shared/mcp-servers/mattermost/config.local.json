@@ -1,0 +1,12 @@
+{
+  "mattermostUrl": "http://mattermost-server:8065/api/v4",
+  "token": "6yenrz7gnib75caqgkq81iaaja",
+  "teamId": "test-demo",
+  "monitoring": {
+    "enabled": false,
+    "schedule": "*/15 * * * *",
+    "channels": ["general"],
+    "topics": ["general"],
+    "messageLimit": 50
+  }
+}

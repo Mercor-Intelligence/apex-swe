@@ -1,0 +1,57 @@
+{
+  "users": [
+    {
+      "userName": "admin",
+      "password": "admin123",
+      "firstName": "Admin",
+      "lastName": "User",
+      "isAdmin": true
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Acme Corp",
+      "billingAddress": "123 Main St",
+      "industry": "Technology"
+    },
+    {
+      "name": "GlobalTech Inc",
+      "billingAddress": "456 Tech Blvd",
+      "industry": "Software"
+    },
+    {
+      "name": "Enterprise Solutions",
+      "billingAddress": "789 Business Ave",
+      "industry": "Consulting"
+    }
+  ],
+  "opportunities": [
+    {
+      "name": "Acme Renewal 2025",
+      "accountName": "Acme Corp",
+      "amount": "150000",
+      "stage": "Negotiation/Review",
+      "probability": "75",
+      "closeDate": "2025-12-31",
+      "description": "Annual renewal for enterprise license - healthy pipeline"
+    },
+    {
+      "name": "GlobalTech Renewal Q1",
+      "accountName": "GlobalTech Inc",
+      "amount": "25000",
+      "stage": "Prospecting",
+      "probability": "30",
+      "closeDate": "2025-11-30",
+      "description": "Renewal at risk - low engagement"
+    },
+    {
+      "name": "Enterprise Solutions Contract",
+      "accountName": "Enterprise Solutions",
+      "amount": "200000",
+      "stage": "Closed Lost",
+      "probability": "0",
+      "closeDate": "2025-10-15",
+      "description": "Lost renewal opportunity"
+    }
+  ]
+}

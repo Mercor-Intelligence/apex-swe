@@ -1,0 +1,123 @@
+{
+  "metadata": {
+    "dataset_name": "Warranty Validator Test Data",
+    "description": "Test tickets for warranty validation",
+    "version": "1.0"
+  },
+  "organizations": [
+    {
+      "id": "org_customers",
+      "name": "Customers",
+      "note": "Customer organization"
+    }
+  ],
+  "groups": [
+    {
+      "id": "group_support",
+      "name": "Support",
+      "note": "Customer support team"
+    }
+  ],
+  "users": [
+    {
+      "id": "user_john",
+      "email": "john@example.com",
+      "firstname": "John",
+      "lastname": "Doe",
+      "role": "Customer",
+      "organization_id": "org_customers"
+    },
+    {
+      "id": "user_jane",
+      "email": "jane@example.com",
+      "firstname": "Jane",
+      "lastname": "Smith",
+      "role": "Customer",
+      "organization_id": "org_customers"
+    },
+    {
+      "id": "user_bob",
+      "email": "bob@example.com",
+      "firstname": "Bob",
+      "lastname": "Johnson",
+      "role": "Customer",
+      "organization_id": "org_customers"
+    },
+    {
+      "id": "user_agent",
+      "email": "agent@example.com",
+      "firstname": "Support",
+      "lastname": "Agent",
+      "role": "Agent",
+      "organization_id": "org_customers"
+    }
+  ],
+  "tickets": [
+    {
+      "id": "ticket_001",
+      "title": "Laptop warranty claim - Order order_20241201_1",
+      "group_id": "group_support",
+      "customer_id": "user_john",
+      "state": "new",
+      "priority": "2 normal",
+      "tags": ["warranty"],
+      "created_at": "2025-11-16T05:00:00Z",
+      "articles": [
+        {
+          "from": "john@example.com",
+          "to": "support@example.com",
+          "subject": "Laptop warranty claim",
+          "body": "Hi, my laptop from order order_20241201_1 has stopped working. Can I get a warranty replacement? Order ID: order_20241201_1",
+          "type": "email",
+          "internal": false,
+          "sender": "Customer",
+          "created_at": "2025-11-16T05:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": "ticket_002",
+      "title": "Mouse warranty expired? - Order order_20230601_1",
+      "group_id": "group_support",
+      "customer_id": "user_jane",
+      "state": "new",
+      "priority": "2 normal",
+      "tags": ["warranty"],
+      "created_at": "2025-11-16T04:00:00Z",
+      "articles": [
+        {
+          "from": "jane@example.com",
+          "to": "support@example.com",
+          "subject": "Mouse warranty claim",
+          "body": "My wireless mouse isn't working properly. Order ID: order_20230601_1. Is it still under warranty?",
+          "type": "email",
+          "internal": false,
+          "sender": "Customer",
+          "created_at": "2025-11-16T04:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": "ticket_003",
+      "title": "Chair warranty claim - Order order_20241101_1",
+      "group_id": "group_support",
+      "customer_id": "user_bob",
+      "state": "open",
+      "priority": "2 normal",
+      "tags": ["warranty"],
+      "created_at": "2025-11-16T03:00:00Z",
+      "articles": [
+        {
+          "from": "bob@example.com",
+          "to": "support@example.com",
+          "subject": "Chair warranty",
+          "body": "Hi, my office chair from order order_20241101_1 is broken. Requesting warranty service.",
+          "type": "email",
+          "internal": false,
+          "sender": "Customer",
+          "created_at": "2025-11-16T03:00:00Z"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,157 @@
+{
+  "correctness": [
+    {
+      "id": "correctness-f2p-1",
+      "description": "Test `test_zammad_bug_tickets_exist` passes: Test 1: Verify prerequisite bug tickets exist.\n\nSteps:\n1. Authenticate with Zammad API\n2. Search for tickets with state=\"new\" and tag=\"bug\"\n3. Assert at least 2 tickets found\n4. Verify tickets have required fields (title, articles)",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_zammad_bug_tickets_exist`",
+      "test_id": "test_zammad_bug_tickets_exist",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-2",
+      "description": "Test `test_plane_issues_created` passes: Test 2: Verify Plane issues were created for bugs.\n\nSteps:\n1. Authenticate with Plane API\n2. Fetch Plane project UUID for \"TEST\"\n3. GET issues from project\n4. Search for issues with label \"type:Bug\"\n5. Assert at least 2 bug issues exist",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_plane_issues_created`",
+      "test_id": "test_plane_issues_created",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-3",
+      "description": "Test `test_issue_titles_match_tickets` passes: Test 3: Verify issue names match ticket titles.\n\nSteps:\n1. Fetch Zammad bug tickets\n2. Get first bug ticket title\n3. Search Plane issues for matching name\n4. Assert Plane issue exists with same title",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_issue_titles_match_tickets`",
+      "test_id": "test_issue_titles_match_tickets",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-4",
+      "description": "Test `test_bug_label_applied` passes: Test 4: Verify correct label is set.\n\nSteps:\n1. Fetch created Plane issues\n2. For each issue created from Zammad bug\n3. Assert issue has label with name=\"type:Bug\"\n4. Verify label format is correct",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_bug_label_applied`",
+      "test_id": "test_bug_label_applied",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-5",
+      "description": "Test `test_summary_report_accurate` passes: Test 5: Verify summary report exists and is accurate.\n\nSteps:\n1. Check file exists at `/app/bug_sync_report.txt`\n2. Read content\n3. Parse \"Zammad bugs found:\" count\n4. Parse \"Plane issues created:\" count\n5. Verify counts match actual tickets and issues",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_summary_report_accurate`",
+      "test_id": "test_summary_report_accurate",
+      "test_type": "fail_to_pass"
+    }
+  ],
+  "functional": [
+    {
+      "id": "functional-1",
+      "description": "The solution connects to Zammad API to fetch tickets.",
+      "weight": "major",
+      "rationale": "Required to access source data.",
+      "source": "task-spec",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-2",
+      "description": "The solution connects to Plane API to create issues.",
+      "weight": "major",
+      "rationale": "Required to push destination data.",
+      "source": "task-spec",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-3",
+      "description": "The solution authenticates with both services.",
+      "weight": "major",
+      "rationale": "Required for API access.",
+      "source": "task-spec",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-4",
+      "description": "The solution filters Zammad tickets by 'bug' tag and 'new' state.",
+      "weight": "major",
+      "rationale": "Required to select relevant tickets.",
+      "source": "task-spec",
+      "dependent_on": [
+        "functional-1"
+      ]
+    },
+    {
+      "id": "functional-5",
+      "description": "The solution creates corresponding issues in Plane with the 'type:Bug' label.",
+      "weight": "major",
+      "rationale": "The core integration task.",
+      "source": "task-spec",
+      "dependent_on": [
+        "functional-2",
+        "functional-4"
+      ]
+    }
+  ],
+  "robustness": [
+    {
+      "id": "robustness-1",
+      "description": "The solution retrieves the Plane project UUID by querying the projects endpoint rather than hardcoding it.",
+      "weight": "major",
+      "rationale": "Ensures the solution works correctly even if the project UUID changes, making it resilient to project recreation or environment differences.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-2",
+      "description": "The solution fetches tags for each ticket using a separate API call to the tags endpoint rather than relying on tags being present in the tickets response.",
+      "weight": "major",
+      "rationale": "Ensures tag information is reliably retrieved since the Zammad tickets endpoint does not include tags in its response, preventing false negatives in bug identification.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-3",
+      "description": "The solution fetches ticket articles for each bug ticket to extract the description content.",
+      "weight": "major",
+      "rationale": "Ensures the issue description contains the actual problem details from the ticket's first article, as article content is not included in the tickets endpoint response.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-4",
+      "description": "The solution authenticates with Zammad by creating an access token rather than using hardcoded credentials in each request.",
+      "weight": "minor",
+      "rationale": "Ensures secure and maintainable authentication by obtaining a session token, reducing the risk of credential exposure in logs or error messages.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-5",
+      "description": "The solution correctly filters tickets when the state is provided as a string (e.g., state='new').",
+      "weight": "major",
+      "rationale": "Ensures the solution handles the common case where Zammad API returns state information as a string value, allowing proper ticket filtering.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-6",
+      "description": "The solution correctly filters tickets when the state is provided as an integer ID (e.g., state_id=1).",
+      "weight": "major",
+      "rationale": "Ensures the solution handles cases where Zammad API returns state as null but provides state_id as an integer, preventing tickets from being incorrectly filtered out.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-7",
+      "description": "The solution retrieves or creates the 'type:Bug' label before creating issues rather than assuming it exists.",
+      "weight": "major",
+      "rationale": "Ensures the label exists before attempting to apply it to issues, preventing label assignment failures and ensuring consistent categorization.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-8",
+      "description": "The solution handles tickets with no articles by using a fallback description (e.g., title).",
+      "weight": "minor",
+      "rationale": "Prevents errors when ticket content is missing.",
+      "source": "solution",
+      "dependent_on": []
+    }
+  ]
+}

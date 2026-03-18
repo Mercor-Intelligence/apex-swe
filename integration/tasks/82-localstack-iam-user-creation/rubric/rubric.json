@@ -1,0 +1,114 @@
+{
+  "correctness": [
+    {
+      "id": "correctness-f2p-1",
+      "description": "Test `test_localstack_accessible` passes: Test that LocalStack is accessible (prerequisite check).",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_localstack_accessible`",
+      "test_id": "test_localstack_accessible",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-2",
+      "description": "Test `test_output_file_exists` passes: Test that the output file was created.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_output_file_exists`",
+      "test_id": "test_output_file_exists",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-3",
+      "description": "Test `test_user_created` passes: Test that the IAM user 'test-user' was created in LocalStack.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_user_created`",
+      "test_id": "test_user_created",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-4",
+      "description": "Test `test_access_key_created` passes: Test that an access key was created for the user.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_access_key_created`",
+      "test_id": "test_access_key_created",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-5",
+      "description": "Test `test_output_format` passes: Test that the output file contains the correct format.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_output_format`",
+      "test_id": "test_output_format",
+      "test_type": "fail_to_pass"
+    }
+  ],
+  "functional": [
+    {
+      "id": "functional-1",
+      "description": "The solution uses the LocalStack endpoint 'http://localhost:4566' (or 'http://localstack:4566')",
+      "weight": "major",
+      "rationale": "Ensures the solution connects to LocalStack rather than AWS production",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-2",
+      "description": "The solution authenticates with LocalStack using the required credentials or API token",
+      "weight": "major",
+      "rationale": "Authentication is required for API access",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-3",
+      "description": "The solution uses boto3 or AWS CLI configured for LocalStack",
+      "weight": "major",
+      "rationale": "boto3/awscli is the standard way to interact with AWS services",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ],
+  "robustness": [
+    {
+      "id": "robustness-1",
+      "description": "The solution verifies successful IAM user creation before attempting to create the access key",
+      "weight": "major",
+      "rationale": "Prevents attempting to create an access key for a non-existent user, which would result in an error and incomplete task execution",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-2",
+      "description": "The solution verifies the output file was successfully written before completing execution",
+      "weight": "minor",
+      "rationale": "Ensures the critical output artifact is actually persisted to disk, preventing scenarios where the file write fails silently due to permissions or disk space issues",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-3",
+      "description": "The solution uses appropriate AWS credentials (test/test) for LocalStack authentication",
+      "weight": "major",
+      "rationale": "Ensures the solution uses the correct dummy credentials expected by LocalStack, preventing authentication failures that would block all IAM operations",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-4",
+      "description": "The solution handles exceptions from boto3 IAM operations",
+      "weight": "major",
+      "rationale": "Ensures failures in IAM operations are caught rather than causing unhandled exceptions that could crash the application or leave it in an inconsistent state",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-5",
+      "description": "The solution provides informative error messages when boto3 IAM operations fail",
+      "weight": "major",
+      "rationale": "Ensures that when IAM operations fail, the error messages are clear and actionable, enabling faster diagnosis and resolution of issues rather than silent failures or cryptic error messages",
+      "source": "prompt",
+      "dependent_on": [
+        "robustness-4"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,208 @@
+{
+  "correctness": [
+    {
+      "id": "correctness-f2p-1",
+      "description": "Test `test_solution_runs_successfully` passes: Test that solution runs successfully.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_solution_runs_successfully`",
+      "test_id": "test_solution_runs_successfully",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-2",
+      "description": "Test `test_output_format_matches_requirement` passes: Test output has correct format.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_output_format_matches_requirement`",
+      "test_id": "test_output_format_matches_requirement",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-3",
+      "description": "Test `test_output_has_valid_counts` passes: Test that tickets were processed and counts are valid.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_output_has_valid_counts`",
+      "test_id": "test_output_has_valid_counts",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-4",
+      "description": "Test `test_approved_decisions_have_rma_info` passes: Test warranty decision logic for approved cases.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_approved_decisions_have_rma_info`",
+      "test_id": "test_approved_decisions_have_rma_info",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-5",
+      "description": "Test `test_zammad_tickets_updated_with_warranty_comment` passes: Test that Zammad tickets were updated.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_zammad_tickets_updated_with_warranty_comment`",
+      "test_id": "test_zammad_tickets_updated_with_warranty_comment",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-6",
+      "description": "Test `test_mattermost_summary_posted` passes: Test Mattermost notification.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_mattermost_summary_posted`",
+      "test_id": "test_mattermost_summary_posted",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-7",
+      "description": "Test `test_output_has_valid_counts` passes: Test that approval/denial counts are reasonable.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_output_has_valid_counts`",
+      "test_id": "test_output_has_valid_counts",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-8",
+      "description": "Test `test_no_critical_errors` passes: Test no critical errors in stderr.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_no_critical_errors`",
+      "test_id": "test_no_critical_errors",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-9",
+      "description": "Test `test_output_has_warranty_mention` passes: Test output contains required warranty information.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_output_has_warranty_mention`",
+      "test_id": "test_output_has_warranty_mention",
+      "test_type": "fail_to_pass"
+    },
+    {
+      "id": "correctness-f2p-10",
+      "description": "Test `test_script_exists` passes: Test that the required script exists at the expected path.",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_script_exists`",
+      "test_id": "test_script_exists",
+      "test_type": "fail_to_pass"
+    }
+  ],
+  "functional": [
+    {
+      "id": "functional-1",
+      "description": "The solution uses the Zammad API endpoint 'http://localhost:8080' (or 'http://zammad:8080')",
+      "weight": "major",
+      "rationale": "Ensures the solution connects to the correct Zammad instance",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-2",
+      "description": "The solution uses the Medusa API endpoint 'http://localhost:9000' (or 'http://medusa:9000')",
+      "weight": "major",
+      "rationale": "Ensures the solution connects to the correct Medusa instance",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-3",
+      "description": "The solution authenticates with Zammad using the required credentials or API token",
+      "weight": "major",
+      "rationale": "Authentication is required for API access",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-4",
+      "description": "The solution integrates data between Zammad and Medusa",
+      "weight": "major",
+      "rationale": "The task requires integration between multiple services",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ],
+  "robustness": [
+    {
+      "id": "robustness-1",
+      "description": "The solution handles Medusa order API responses for non-existent orders (404 status) by returning a 'not_found' decision rather than raising an exception",
+      "weight": "major",
+      "rationale": "Allows the automation to gracefully handle tickets referencing invalid order IDs, providing clear feedback to customers instead of failing silently",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-2",
+      "description": "The solution handles orders with missing warranty_months metadata by returning a 'not_covered' decision rather than crashing",
+      "weight": "major",
+      "rationale": "Ensures the automation can process all orders regardless of whether warranty metadata is configured, preventing failures on products without warranty terms",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-3",
+      "description": "The solution handles Mattermost channel lookup failures by falling back to 'town-square' when 'customer-loyalty' channel is not found",
+      "weight": "minor",
+      "rationale": "Ensures notifications are still delivered even if the preferred channel is unavailable, maintaining visibility for the concierge team",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-4",
+      "description": "The solution parses ISO timestamp strings with timezone information correctly when comparing ticket creation times to the 24-hour cutoff",
+      "weight": "major",
+      "rationale": "Prevents incorrect filtering of tickets due to timezone mismatches, ensuring all tickets within the actual 24-hour window are processed regardless of timezone representation",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-5",
+      "description": "The solution handles missing order IDs in ticket titles by treating them as validation errors",
+      "weight": "major",
+      "rationale": "Prevents the automation from crashing when encountering tickets without order IDs in their titles, ensuring other valid tickets are still processed",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-6",
+      "description": "The solution handles malformed order IDs in ticket titles by treating them as validation errors",
+      "weight": "major",
+      "rationale": "Prevents the automation from crashing when encountering tickets with incorrectly formatted order IDs, ensuring other valid tickets are still processed",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-7",
+      "description": "The solution does not crash when encountering tickets with missing or malformed order IDs",
+      "weight": "major",
+      "rationale": "Ensures the automation continues running and can process other tickets even when some tickets have unexpected title formats",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-8",
+      "description": "The solution logs an error when Medusa authentication fails",
+      "weight": "major",
+      "rationale": "Provides visibility into authentication failures so operators can diagnose and fix credential issues",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-9",
+      "description": "The solution exits gracefully when Medusa authentication fails rather than proceeding with invalid credentials",
+      "weight": "major",
+      "rationale": "Prevents the automation from attempting to process tickets without valid Medusa access, which would result in all validations failing and incorrect customer communications",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-10",
+      "description": "The solution continues processing remaining tickets even if updating a single Zammad ticket fails",
+      "weight": "major",
+      "rationale": "Ensures failures in updating one ticket do not prevent other valid tickets from being processed, maximizing the number of customers who receive timely warranty decisions",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-11",
+      "description": "The solution continues processing remaining tickets even if validating a single order fails",
+      "weight": "major",
+      "rationale": "Ensures failures in validating one order do not prevent other valid tickets from being processed, maximizing the number of customers who receive timely warranty decisions",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ]
+}

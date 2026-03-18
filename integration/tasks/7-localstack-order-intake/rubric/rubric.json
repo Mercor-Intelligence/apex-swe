@@ -1,0 +1,64 @@
+{
+  "correctness": [
+    {
+      "id": "correctness-f2p-1",
+      "description": "Test `test_order_exists_in_dynamodb` passes: Test that the hardcoded order exists in DynamoDB with all required fields",
+      "weight": "major",
+      "rationale": "Core fix verification via `test_order_exists_in_dynamodb`",
+      "test_id": "test_order_exists_in_dynamodb",
+      "test_type": "fail_to_pass"
+    }
+  ],
+  "functional": [
+    {
+      "id": "functional-1",
+      "description": "The solution connects to the LocalStack DynamoDB endpoint at 'http://localstack:4566'",
+      "weight": "major",
+      "rationale": "Ensures the solution interacts with the local emulation environment instead of production AWS.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-2",
+      "description": "The solution uses the DynamoDB table named 'orders'",
+      "weight": "major",
+      "rationale": "The task specifies the target table name, which must match the pre-created resource.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "functional-3",
+      "description": "The solution inserts the specific order 'ORD-001' with required fields",
+      "weight": "major",
+      "rationale": "The problem requires inserting a specific hardcoded order for validation.",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ],
+  "robustness": [
+    {
+      "id": "robustness-1",
+      "description": "The solution uses Decimal type for 'price' and 'total' fields",
+      "weight": "major",
+      "rationale": "DynamoDB requires Decimal types for precise numeric values; using floats can lead to precision loss or errors.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-2",
+      "description": "The solution explicitly configures the AWS region (e.g., 'us-east-1')",
+      "weight": "minor",
+      "rationale": "Prevents boto3 from using incorrect default region settings.",
+      "source": "prompt",
+      "dependent_on": []
+    },
+    {
+      "id": "robustness-3",
+      "description": "The solution performs a verification step (get_item) after insertion to confirm success",
+      "weight": "minor",
+      "rationale": "Self-verification ensures the script confirms the operation was successful before exiting.",
+      "source": "prompt",
+      "dependent_on": []
+    }
+  ]
+}
