@@ -1,0 +1,238 @@
+#!/usr/bin/env bash
+# Mattermost MCP server wrapper
+# Sources environment variables, generates config on-demand, and loads data if needed
+
+CONFIG_FILE="/config/mcp-config.txt"
+DATA_LOADED_MARKER="/tmp/.mattermost_data_loaded"
+
+# Debug: show config file status
+echo "DEBUG: Config file check:" >&2
+if [ -f "$CONFIG_FILE" ]; then
+    echo "  - File exists: $CONFIG_FILE" >&2
+    echo "  - Size: $(wc -c < "$CONFIG_FILE") bytes" >&2
+    echo "  - Mattermost lines:" >&2
+    grep -i mattermost "$CONFIG_FILE" 2>/dev/null | head -5 | sed 's/^/    /' >&2 || echo "    (none found)" >&2
+else
+    echo "  - File DOES NOT exist: $CONFIG_FILE" >&2
+fi
+
+# Source config file and export all variables
+if [ -f "$CONFIG_FILE" ]; then
+    set -a
+    source "$CONFIG_FILE"
+    set +a
+fi
+
+echo "DEBUG: After sourcing - MATTERMOST_ENDPOINT=${MATTERMOST_ENDPOINT:-<not set>}" >&2
+
+# Function to ensure data is loaded
+ensure_data_loaded() {
+    local api_token="$1"
+    
+    # Skip if already loaded in this session
+    if [ -f "$DATA_LOADED_MARKER" ]; then
+        echo "DEBUG: Data already loaded (marker exists)" >&2
+        return 0
+    fi
+    
+    # Get team ID
+    local team_id
+    team_id=$(curl -s -H "Authorization: Bearer $api_token" \
+        "http://mattermost:8065/api/v4/teams/name/test-demo" 2>/dev/null | jq -r '.id // empty')
+    
+    if [ -z "$team_id" ] || [ "$team_id" = "null" ]; then
+        echo "DEBUG: Could not get team ID for data check" >&2
+        return 1
+    fi
+    
+    # Get channels and check message counts
+    local channels_resp
+    channels_resp=$(curl -s -H "Authorization: Bearer $api_token" \
+        "http://mattermost:8065/api/v4/teams/$team_id/channels" 2>/dev/null)
+    
+    local general_count ts_count
+    general_count=$(echo "$channels_resp" | jq -r '.[] | select(.name=="general") | .total_msg_count // 0' 2>/dev/null || echo "0")
+    ts_count=$(echo "$channels_resp" | jq -r '.[] | select(.name=="town-square") | .total_msg_count // 0' 2>/dev/null || echo "0")
+    
+    echo "DEBUG: Channel counts - general=$general_count, town-square=$ts_count" >&2
+    
+    # If either channel has data, we're good
+    if [ -n "$general_count" ] && [ "$general_count" -gt 50 ]; then
+        echo "DEBUG: general channel has $general_count messages - data exists" >&2
+        touch "$DATA_LOADED_MARKER"
+        return 0
+    fi
+    if [ -n "$ts_count" ] && [ "$ts_count" -gt 50 ]; then
+        echo "DEBUG: town-square has $ts_count messages - data exists" >&2
+        touch "$DATA_LOADED_MARKER"
+        return 0
+    fi
+    
+    # No data - try to load from scraped.json
+    if [ ! -f "/data/mattermost/scraped.json" ]; then
+        echo "DEBUG: No scraped.json found, skipping data load" >&2
+        touch "$DATA_LOADED_MARKER"
+        return 0
+    fi
+    
+    local msg_count
+    msg_count=$(jq 'if type == "array" then length elif .messages then (.messages | length) else 0 end' /data/mattermost/scraped.json 2>/dev/null || echo "0")
+    
+    if [ "$msg_count" -lt 10 ]; then
+        echo "DEBUG: scraped.json has only $msg_count messages, skipping load" >&2
+        touch "$DATA_LOADED_MARKER"
+        return 0
+    fi
+    
+    echo "⏳ Loading $msg_count Discord messages into Mattermost..." >&2
+    
+    # Find target channel (prefer general if exists, else town-square)
+    local channel_id channel_name
+    channel_id=$(echo "$channels_resp" | jq -r '.[] | select(.name=="general") | .id // empty' 2>/dev/null)
+    channel_name="general"
+    
+    if [ -z "$channel_id" ] || [ ${#channel_id} -lt 20 ]; then
+        channel_id=$(echo "$channels_resp" | jq -r '.[] | select(.name=="town-square") | .id // empty' 2>/dev/null)
+        channel_name="town-square"
+    fi
+    
+    if [ -z "$channel_id" ] || [ ${#channel_id} -lt 20 ]; then
+        echo "DEBUG: Could not find target channel" >&2
+        touch "$DATA_LOADED_MARKER"
+        return 1
+    fi
+    
+    echo "   Loading into '$channel_name' channel ($channel_id)" >&2
+    
+    # Determine sample rate based on message count
+    local sample_rate=10
+    if [ "$msg_count" -lt 1000 ]; then
+        sample_rate=1
+    elif [ "$msg_count" -lt 5000 ]; then
+        sample_rate=5
+    fi
+    
+    local target_msgs=$((msg_count / sample_rate))
+    echo "   Sampling every ${sample_rate}th message (~$target_msgs total)..." >&2
+    
+    # Upload messages (sampled, synchronous to avoid overloading)
+    local uploaded=0
+    local idx=0
+    
+    while IFS= read -r msg; do
+        # Sample
+        if [ $((idx % sample_rate)) -ne 0 ]; then
+            idx=$((idx + 1))
+            continue
+        fi
+        idx=$((idx + 1))
+        
+        local content
+        content=$(echo "$msg" | jq -r '(if .content | type == "object" then .content.body else null end) // .content // .message // empty | if type == "string" then . else empty end' 2>/dev/null | head -c 4000)
+        
+        if [ -n "$content" ] && [ "$content" != "null" ] && [ ${#content} -gt 5 ]; then
+            local escaped_content
+            escaped_content=$(echo "$content" | jq -Rs . 2>/dev/null)
+            
+            curl -s -X POST "http://mattermost:8065/api/v4/posts" \
+                -H "Authorization: Bearer $api_token" \
+                -H "Content-Type: application/json" \
+                -d "{\"channel_id\":\"$channel_id\",\"message\":$escaped_content}" \
+                >/dev/null 2>&1
+            
+            uploaded=$((uploaded + 1))
+            
+            if [ $((uploaded % 200)) -eq 0 ]; then
+                echo "   Uploaded $uploaded messages..." >&2
+            fi
+            
+            # Brief pause every 50 to avoid rate limiting
+            if [ $((uploaded % 50)) -eq 0 ]; then
+                sleep 0.1
+            fi
+        fi
+    done < <(jq -c 'if type == "array" then .[] elif .messages then .messages[] else empty end' /data/mattermost/scraped.json 2>/dev/null)
+    
+    echo "✅ Loaded $uploaded messages into Mattermost '$channel_name' channel" >&2
+    touch "$DATA_LOADED_MARKER"
+    return 0
+}
+
+# If Mattermost config is missing, try to generate it on-demand
+if [ -z "$MATTERMOST_ENDPOINT" ] || [ -z "$MATTERMOST_TOKEN" ] || [ -z "$MATTERMOST_TEAM" ]; then
+    echo "⏳ Mattermost config missing, attempting to generate..." >&2
+    
+    # Wait for Mattermost to be ready
+    for i in {1..60}; do
+        if curl -s http://mattermost:8065/api/v4/system/ping 2>/dev/null | grep -q "OK"; then
+            echo "✅ Mattermost is ready" >&2
+            
+            # Login credentials
+            admin_email="admin@demo.local"
+            admin_password="AdminUser123!"
+            
+            # Try to create admin user (ignore if exists)
+            curl -s -X POST http://mattermost:8065/api/v4/users \
+                -H "Content-Type: application/json" \
+                -d "{\"email\":\"$admin_email\",\"username\":\"admin\",\"password\":\"$admin_password\",\"first_name\":\"Admin\",\"last_name\":\"User\"}" \
+                >/dev/null 2>&1 || true
+            
+            sleep 2
+            
+            # Login to get session token
+            login_resp=$(curl -s -i -X POST http://mattermost:8065/api/v4/users/login \
+                -H "Content-Type: application/json" \
+                -d "{\"login_id\":\"$admin_email\",\"password\":\"$admin_password\"}" 2>/dev/null)
+            session_token=$(echo "$login_resp" | grep -i "^Token:" | awk '{print $2}' | tr -d '\r\n')
+            
+            if [ -n "$session_token" ]; then
+                # Create API token
+                token_resp=$(curl -s -X POST http://mattermost:8065/api/v4/users/me/tokens \
+                    -H "Authorization: Bearer $session_token" \
+                    -H "Content-Type: application/json" \
+                    -d '{"description":"MCP Integration Token"}' 2>/dev/null)
+                api_token=$(echo "$token_resp" | jq -r '.token // empty' 2>/dev/null)
+                
+                if [ -n "$api_token" ] && [ "$api_token" != "null" ]; then
+                    # Ensure team exists
+                    curl -s -X POST http://mattermost:8065/api/v4/teams \
+                        -H "Authorization: Bearer $api_token" \
+                        -H "Content-Type: application/json" \
+                        -d '{"name":"test-demo","display_name":"Test Demo","type":"O"}' \
+                        >/dev/null 2>&1 || true
+                    
+                    export MATTERMOST_ENDPOINT="http://mattermost:8065/api/v4"
+                    export MATTERMOST_TOKEN="$api_token"
+                    export MATTERMOST_TEAM="test-demo"
+                    
+                    # Save to config file for future use
+                    echo "" >> "$CONFIG_FILE"
+                    echo "# Mattermost config (generated on-demand by mcp-mattermost wrapper)" >> "$CONFIG_FILE"
+                    echo "export MATTERMOST_ENDPOINT=http://mattermost:8065/api/v4" >> "$CONFIG_FILE"
+                    echo "export MATTERMOST_TOKEN=$api_token" >> "$CONFIG_FILE"
+                    echo "export MATTERMOST_TEAM=test-demo" >> "$CONFIG_FILE"
+                    
+                    echo "✅ Mattermost token generated successfully" >&2
+                    break
+                fi
+            fi
+        fi
+        if [ $((i % 10)) -eq 0 ]; then
+            echo "   Waiting for Mattermost... ($i/60)" >&2
+        fi
+        sleep 1
+    done
+fi
+
+# Final check
+if [ -z "$MATTERMOST_ENDPOINT" ] || [ -z "$MATTERMOST_TOKEN" ] || [ -z "$MATTERMOST_TEAM" ]; then
+    echo "Error: Could not configure Mattermost" >&2
+    echo "Required: MATTERMOST_ENDPOINT, MATTERMOST_TOKEN, MATTERMOST_TEAM" >&2
+    exit 1
+fi
+
+# Ensure data is loaded (runs once per container session)
+ensure_data_loaded "$MATTERMOST_TOKEN"
+
+# Run the Mattermost MCP server
+exec node /app/mcp-servers/mattermost/dist/main.js "$@"

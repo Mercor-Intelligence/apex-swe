@@ -1,0 +1,26 @@
+# Lightweight Plane API with embedded PostgreSQL
+# Use the latest image which should include the application code
+FROM makeplane/plane-backend:latest
+
+# Debug: Check what's in the base image
+RUN echo "🔍 Checking base image contents:" && \
+    ls -la / && \
+    echo "🔍 Checking for app directories:" && \
+    (ls -la /code 2>/dev/null || echo "/code not found") && \
+    (ls -la /app 2>/dev/null || echo "/app not found") && \
+    (ls -la /api 2>/dev/null || echo "/api not found")
+
+# Install PostgreSQL, Redis, and Node.js (for MCP servers)
+RUN apk update && \
+    apk add --no-cache postgresql postgresql-client redis su-exec bash nodejs npm && \
+    rm -rf /var/cache/apk/*
+
+# Copy the entrypoint script
+COPY shared/dockerfiles/docker-entrypoint-api-lightweight.sh /docker-entrypoint-api-lightweight.sh
+RUN chmod +x /docker-entrypoint-api-lightweight.sh
+
+# The preview image has the app at /code
+WORKDIR /code
+
+# Override the default entrypoint
+ENTRYPOINT ["/bin/bash", "/docker-entrypoint-api-lightweight.sh"]

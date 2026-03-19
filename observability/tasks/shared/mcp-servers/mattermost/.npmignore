@@ -1,0 +1,27 @@
+# Source files
+src/
+tests/
+*.test.ts
+*.test.js
+
+# Configuration files
+.env*
+.cursor/
+.vscode/
+.git/
+.gitignore
+
+# Development dependencies
+eslint.config.js
+.prettierrc.json
+.editorconfig
+.cursorignore
+tsconfig.json
+
+# Build tools
+node_modules/
+coverage/
+*.log
+
+# Development scripts
+deploy*.sh

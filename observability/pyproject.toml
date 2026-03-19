@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm[toml]>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inspect-evals-apexcode"
+version = "0.1.0"
+description = "Inspect AI evaluations for ApexCode Observability benchmark"
+authors = [{ name = "ApexCode Team" }]
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT License" }
+dependencies = [
+    "inspect_ai>=0.3.0",
+    "pyyaml>=6.0",
+    # LLM provider SDKs - required by inspect_ai for model access
+    "anthropic>=0.39.0",
+    "openai>=1.0.0",
+    "google-generativeai>=0.8.0",  # Google's Generative AI SDK for Gemini models
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "mypy",
+    "types-PyYAML",  # Type stubs for mypy
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agent*", "eval_runner*", "parser*"]
+
+[tool.ruff]
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B"]
+ignore = ["E501", "B008"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+

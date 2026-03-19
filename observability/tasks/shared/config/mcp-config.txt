@@ -1,0 +1,1 @@
+# Basic MCP config for immediate harness recognition - services will augment with real tokens
