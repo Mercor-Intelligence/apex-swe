@@ -1,8 +1,0 @@
-# Engineer capacity targets for sprint planning
-# Format: engineer_email: hours_available_per_sprint
-
-alice@example.com: 40
-bob@example.com: 32
-charlie@example.com: 36
-diana@example.com: 40
-eve@example.com: 30
