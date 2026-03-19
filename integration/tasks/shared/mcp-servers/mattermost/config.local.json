@@ -1,6 +1,6 @@
 {
   "mattermostUrl": "http://mattermost-server:8065/api/v4",
-  "token": "6yenrz7gnib75caqgkq81iaaja",
+  "token": "aec4yus143y1fpr3r5c1ejhdxy",
   "teamId": "test-demo",
   "monitoring": {
     "enabled": false,
