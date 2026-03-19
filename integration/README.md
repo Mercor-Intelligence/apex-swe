@@ -9,6 +9,7 @@ A production-ready framework for evaluating AI models on software engineering ta
 - **Parallel Execution**: Run multiple tasks simultaneously
 - **Comprehensive Logging**: Detailed episode-by-episode execution logs
 - **MCP Integration**: Built-in support for Model Context Protocol servers
+- **Custom Task Directories**: Point to any task folder with `--tasks-dir`
 
 ## Quick Start
 
@@ -18,6 +19,7 @@ A production-ready framework for evaluating AI models on software engineering ta
 - Docker (running)
 - 8GB RAM minimum (16GB recommended)
 - Valid API keys for your chosen AI provider
+- Task definitions in a local folder
 
 ### Installation
 
@@ -50,19 +52,22 @@ pip install -e ".[dev]"  # Includes pytest, black, ruff, mypy
 # Set your API key
 export ANTHROPIC_API_KEY='your-key-here'
 
-# Run an evaluation
+# Run an evaluation with tasks at a custom path
 apx run my-experiment \
   --tasks 1-aws-s3-snapshots \
   --models claude-sonnet-4-20250514 \
   --n-trials 3 \
-  --timeout 1800
+  --timeout 1800 \
+  --tasks-dir <path-to-task>
 ```
+
+> **Note:** The `shared/` directory (Dockerfiles, MCP configs, entrypoint scripts) is always resolved from the repo's `integration/tasks/shared/` regardless of where `--tasks-dir` points. You do not need to copy or symlink it.
 
 ### List Available Resources
 
 ```bash
 # List all available tasks
-apx list-tasks
+apx list-tasks --tasks-dir <path-to-task>
 
 # List all supported models
 apx list-models
@@ -184,7 +189,8 @@ integration/
 │       ├── file_tool.py      # File operations
 │       ├── terminal_tool.py  # Terminal commands
 │       └── todo_tool.py      # Todo management
-├── tasks/                    # Task definitions (25 OS tasks + shared resources)
+├── tasks/
+│   └── shared/               # Shared resources (Dockerfiles, MCP configs, entrypoints)
 └── runs/                     # Evaluation results (created at runtime)
 ```
 
@@ -219,20 +225,26 @@ runs/experiment_my-experiment/
 ## Example Workflow
 
 ```bash
-# 1. Set API key
+# 1. Install the harness
+cd integration
+./install.sh
+source venv/bin/activate
+
+# 2. Set API key
 export ANTHROPIC_API_KEY='your-key'
 
-# 2. List available tasks
-apx list-tasks
+# 3. List available tasks
+apx list-tasks --tasks-dir <path-to-task>
 
-# 3. Run evaluation (3 parallel trials of one task)
+# 4. Run evaluation (3 parallel trials of one task)
 apx run my-eval \
   --tasks 1-aws-s3-snapshots \
   --models claude-sonnet-4-20250514 \
   --n-trials 3 \
-  --timeout 1800
+  --timeout 1800 \
+  --tasks-dir <path-to-task>
 
-# 4. View results
+# 5. View results
 cat runs/experiment_my-eval/results.json
 ```
 
@@ -241,12 +253,12 @@ cat runs/experiment_my-eval/results.json
 ### High Parallelism (More Trials)
 
 ```bash
-# Run 10 trials with 8 running in parallel
 apx run stress-test \
   --tasks 1-aws-s3-snapshots \
   --models claude-sonnet-4-20250514 \
   --n-trials 10 \
-  --max-workers 8
+  --max-workers 8 \
+  --tasks-dir <path-to-task>
 ```
 
 ### Custom Timeouts
@@ -255,7 +267,8 @@ apx run stress-test \
 apx run fast-eval \
   --tasks simple-task \
   --models claude-sonnet-4-20250514 \
-  --timeout 600
+  --timeout 600 \
+  --tasks-dir <path-to-task>
 ```
 
 ### With Todo Tool
@@ -264,7 +277,8 @@ apx run fast-eval \
 apx run with-todos \
   --tasks complex-task \
   --models claude-sonnet-4-20250514 \
-  --todo-tool-enabled
+  --todo-tool-enabled \
+  --tasks-dir <path-to-task>
 ```
 
 ## Development
@@ -274,10 +288,7 @@ apx run with-todos \
 The project is configured with `pytest` (see `pytest.ini`). Test infrastructure is ready but tests are not yet implemented.
 
 ```bash
-# Install development dependencies
 pip install -e ".[dev]"
-
-# When tests are available, run with:
 pytest
 ```
 
@@ -289,13 +300,8 @@ The project uses:
 - **MyPy** - Type checking
 
 ```bash
-# Format code
 black src/
-
-# Run linter
 ruff check src/
-
-# Type checking
 mypy src/
 ```
 
@@ -303,28 +309,22 @@ mypy src/
 
 ### Docker Not Running
 ```bash
-# Check Docker status
 docker ps
-
-# Start Docker if needed
-sudo systemctl start docker
+sudo systemctl start docker  # if needed
 ```
 
 ### API Key Issues
 ```bash
-# Verify API key is set
 echo $ANTHROPIC_API_KEY
-
-# Test API key with LiteLLM
 python3 -c "import litellm; print(litellm.completion(model='claude-sonnet-4-20250514', messages=[{'role': 'user', 'content': 'test'}]))"
 ```
 
 ### Missing Tasks
 ```bash
-# Ensure tasks directory exists and has proper structure
-ls -la tasks/
+# Verify your tasks directory has the expected structure
+ls -la <path-to-task>/
 
-# Each task should have:
+# Each task folder should have:
 # - task.yaml
 # - Dockerfile (optional)
 # - docker-compose.yaml (optional)

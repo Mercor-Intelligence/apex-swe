@@ -29,13 +29,17 @@ Tasks run in Docker containers with MCP (Model Context Protocol) tools for termi
 # Install (creates venv at repo root, installs the apx CLI)
 ./install.sh
 
-# Activate and run
+# Activate and download tasks from HuggingFace
 source venv/bin/activate
 cd integration
+pip install huggingface_hub
+# See integration/README.md for the download script
+
+# Run an evaluation
 apx run my-experiment --tasks task-id --models claude-sonnet-4-20250514 --n-trials 3
 ```
 
-See [integration/README.md](integration/README.md) for full setup, CLI reference, and task authoring.
+See [integration/README.md](integration/README.md) for full setup, task download instructions, CLI reference, and task authoring.
 
 ### Observability Harness
 

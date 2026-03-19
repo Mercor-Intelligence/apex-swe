@@ -403,7 +403,8 @@ def _setup_docker_environment(
     if dockerfile_found:
         shutil.copy2(dockerfile_path, working_dir / "Dockerfile")
 
-    shared_dir = task_context.task_dir.parent / "shared"
+    repo_root = Path(__file__).resolve().parents[1]
+    shared_dir = repo_root / "tasks" / "shared"
     if shared_dir.exists() and shared_dir.is_dir():
         dest_shared = working_dir / "shared"
         if dest_shared.exists():
