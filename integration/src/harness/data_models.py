@@ -42,6 +42,11 @@ class ModelType(str, Enum):
     DEEPSEEK_V3P2 = "fireworks_ai/accounts/fireworks/models/deepseek-v3p2"
     KIMI_K2_THINKING = "fireworks_ai/accounts/fireworks/models/kimi-k2-thinking"
 
+    CLAUDE_OPUS_4_6 = "claude-opus-4-6"
+    GPT5_2 = "gpt-5.2"
+    GPT5_4 = "gpt-5.4"
+    GEMINI_3_1_PRO_PREVIEW = "gemini/gemini-3.1-pro-preview"
+
     CUSTOM = "custom"
 
 
@@ -137,6 +142,9 @@ class EvaluationConfig(BaseModel):
     )
     todo_tool_enabled: bool = Field(
         False, description="Enable the todo tool for task management"
+    )
+    reasoning_effort: str | None = Field(
+        None, description="Reasoning effort: low, medium, high (auto-detected for supported models)"
     )
     custom_agent_config: dict[str, Any] | None = Field(
         None, description="Custom agent configuration"

@@ -89,7 +89,7 @@ class EvaluationExecutor:
             }
         )
 
-        llm = self._get_llm(config.model, task_context)
+        llm = self._get_llm(config.model, task_context, reasoning_effort=getattr(config, 'reasoning_effort', None))
 
         existing_trials = []
         if resume_from:
@@ -217,14 +217,14 @@ class EvaluationExecutor:
         )
 
     def _get_llm(
-        self, model_type: ModelType, task_context: TaskContext | None = None
+        self, model_type: ModelType, task_context: TaskContext | None = None, reasoning_effort: str | None = None
     ) -> LiteLLM:
         """Get LLM for the specified model type."""
         if model_type in self.llm_factory:
             return self.llm_factory[model_type]
 
         model_name = model_type.value
-        return create_llm(model_name)
+        return create_llm(model_name, reasoning_effort=reasoning_effort)
 
     def _execute_trials_parallel(
         self,

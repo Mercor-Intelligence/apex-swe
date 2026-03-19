@@ -184,29 +184,6 @@ class ToolExecutor:
             }
         )
 
-    def get_execution_history(self, limit: int | None = None) -> list[dict[str, Any]]:
-        """Get execution history."""
-        if limit:
-            return self.execution_history[-limit:]
-        return self.execution_history
-
-    def get_tool_stats(self, tool_name: str | None = None) -> dict[str, Any]:
-        """Get tool statistics."""
-        if tool_name:
-            executions = [e for e in self.execution_history if e["tool"] == tool_name]
-        else:
-            executions = self.execution_history
-
-        if not executions:
-            return {"total_executions": 0, "average_time": 0.0}
-
-        total_time = sum(e["execution_time"] for e in executions)
-        return {
-            "total_executions": len(executions),
-            "average_time": total_time / len(executions),
-            "total_time": total_time,
-        }
-
     def list_tools(self) -> list[str]:
         """List all available tools."""
         return [name for name, tool in self.tools.items() if tool is not None]

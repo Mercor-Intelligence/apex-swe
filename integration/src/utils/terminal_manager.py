@@ -6,8 +6,6 @@ import logging
 import re
 import tarfile
 import time
-from collections.abc import Generator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -1193,48 +1191,3 @@ class TerminalSessionManager:
                         logger._log(f"{failure_message}: {e}")
 
 
-@contextmanager
-def terminal_environment(
-    docker_manager: DockerComposeManager,
-    session_name: str | None = None,
-    commands_path: Path | None = None,
-    disable_recording: bool = False,
-    user: str = "",
-) -> Generator[TerminalSessionManager, None, None]:
-    """Context manager for terminal environment lifecycle."""
-    if session_name is None:
-        session_name = f"apex_terminal_{int(time.time())}"
-
-    manager = TerminalSessionManager(docker_manager.container)
-
-    try:
-        yield manager
-    finally:
-        manager.stop_all_sessions()
-
-
-def check_tmux_availability(container: Container) -> bool:
-    """Check if tmux is available in the container."""
-    try:
-        result = container.exec_run(["which", "tmux"])
-        return result.exit_code == 0
-    except Exception:
-        return False
-
-
-def install_tmux_in_container(container: Container) -> bool:
-    """Install tmux in the container if not available."""
-    try:
-        result = container.exec_run(
-            [
-                "sh",
-                "-c",
-                "apt-get update && apt-get install -y tmux || "
-                "yum install -y tmux || "
-                "apk add tmux || "
-                "echo 'tmux installation failed'",
-            ]
-        )
-        return result.exit_code == 0
-    except Exception:
-        return False

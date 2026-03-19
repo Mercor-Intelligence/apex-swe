@@ -12,7 +12,14 @@ from litellm.exceptions import (
 )
 from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
-from src.config import DEFAULT_TEMPERATURE, MODELS_NOT_SUPPORTING_TEMP, REQUIRED_TEMPERATURE_1_0
+from src.config import (
+    ANTHROPIC_THINKING_BUDGETS,
+    DEFAULT_TEMPERATURE,
+    GEMINI_THINKING_BUDGETS,
+    MODELS_NOT_SUPPORTING_TEMP,
+    MODELS_SUPPORTING_REASONING,
+    REQUIRED_TEMPERATURE_1_0,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,20 +38,19 @@ class OutputLengthExceededError(Exception):
         self.truncated_response = truncated_response
 
 
-class ParseError(Exception):
-    """Raised when parsing LLM response fails."""
-
-    pass
-
-
 # Model token limits
 MODEL_MAX_TOKENS = {
     "claude-sonnet-4-20250514": 1_000_000,
     "claude-sonnet-4-5-20250929": 1_000_000,
+    "claude-opus-4-5-20251101": 200_000,
+    "claude-opus-4-6": 1_000_000,
     "gemini/gemini-2.5-pro": 1_000_000,
     "gemini/gemini-3-pro-preview": 1_000_000,
-    "claude-opus-4-5-20251101": 200_000,
+    "gemini/gemini-3.1-pro-preview": 1_000_000,
     "gpt-5.1-codex": 272_000,
+    "gpt-5.2": 400_000,
+    "gpt-5.4": 272_000,
+    "xai/grok-4": 256_000,
 }
 
 # Provider detection patterns
@@ -75,12 +81,21 @@ class LiteLLM:
         model_name: str,
         api_key: str | None = None,
         temperature: float | None = None,
+        reasoning_effort: str | None = None,
         **kwargs,
     ):
         self.model_name = model_name
         self.api_key = api_key
         self.conversation_history: list[dict[str, Any]] = []
         self.total_tokens_used = 0
+
+        # Set reasoning effort (explicit > config default > None)
+        self.reasoning_effort = reasoning_effort
+        if not self.reasoning_effort:
+            for prefix, default_effort in MODELS_SUPPORTING_REASONING.items():
+                if model_name.startswith(prefix):
+                    self.reasoning_effort = default_effort
+                    break
 
         # Set max tokens
         self.max_tokens = MODEL_MAX_TOKENS.get(model_name)
@@ -131,8 +146,19 @@ class LiteLLM:
                 completion_kwargs["extra_headers"] = {"anthropic-beta": "context-1m-2025-08-07"}
             if self.model_name in ("claude-sonnet-4-5-20250929", "claude-opus-4-5-20251101"):
                 completion_kwargs["temperature"] = 1.0
-            if self.model_name.startswith("o1") or self.model_name.startswith("o3"):
-                completion_kwargs["reasoning_effort"] = "high"
+            # Apply reasoning/thinking based on provider
+            if self.reasoning_effort:
+                provider = get_provider_for_model(self.model_name)
+                if provider == "anthropic":
+                    budget = ANTHROPIC_THINKING_BUDGETS.get(self.reasoning_effort, 32_000)
+                    completion_kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
+                    completion_kwargs["temperature"] = 1.0  # Required for Anthropic thinking
+                elif provider == "google":
+                    budget = GEMINI_THINKING_BUDGETS.get(self.reasoning_effort, 32_768)
+                    completion_kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
+                else:
+                    # OpenAI, xAI: use reasoning_effort directly
+                    completion_kwargs["reasoning_effort"] = self.reasoning_effort
 
             response = litellm.completion(**completion_kwargs)
             return response.choices[0].message.content
@@ -226,11 +252,11 @@ def get_provider_for_model(model: str) -> str:
     raise ValueError(f"Unknown model: {model}")
 
 
-def create_llm(model_name: str, api_key: str | None = None, **kwargs) -> LiteLLM:
+def create_llm(model_name: str, api_key: str | None = None, reasoning_effort: str | None = None, **kwargs) -> LiteLLM:
     """Create an LLM from model name."""
     if not api_key:
         provider = get_provider_for_model(model_name)
         api_key = os.getenv(API_KEY_ENV[provider])
         if not api_key:
             raise ValueError(f"API key not found for {model_name}")
-    return LiteLLM(model_name, api_key)
+    return LiteLLM(model_name, api_key, reasoning_effort=reasoning_effort)

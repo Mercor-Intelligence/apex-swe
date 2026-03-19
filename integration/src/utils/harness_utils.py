@@ -18,7 +18,6 @@ from .docker_manager import (
 )
 from src.harness.data_models import (
     ExecutionStatus,
-    ModelResponse,
     RunResult,
     TaskContext,
     TaskExecution,
@@ -134,55 +133,6 @@ def _setup_task_files_with_structure(
                         and not (working_dir / file_path.name).exists()
                     ):
                         shutil.copy2(file_path, working_dir / file_path.name)
-
-
-def validate_agent_response(
-    response: Any,
-    required_fields: list[str] | None = None,
-) -> tuple[bool, str | None, ModelResponse | None]:
-    """
-    Validate an agent response and convert to standardized format.
-
-    Args:
-        response: Raw response from agent
-        required_fields: List of required fields in response
-
-    Returns:
-        Tuple of (is_valid, error_message, standardized_response)
-    """
-    if required_fields is None:
-        required_fields = ["content"]
-
-    try:
-        if isinstance(response, dict):
-            response_data = response
-        elif isinstance(response, str):
-            try:
-                response_data = json.loads(response)
-            except json.JSONDecodeError:
-                response_data = {"content": response}
-        else:
-            response_data = {"content": str(response)}
-
-        if not all(field in response_data for field in required_fields):
-            missing = [f for f in required_fields if f not in response_data]
-            return False, f"Missing required fields: {missing}", None
-
-        return (
-            True,
-            None,
-            ModelResponse(
-                content=response_data.get("content", ""),
-                reasoning=response_data.get("reasoning"),
-                confidence=response_data.get("confidence"),
-                metadata=response_data.get("metadata", {}),
-                tokens_used=response_data.get("tokens_used"),
-                response_time=response_data.get("response_time"),
-            ),
-        )
-
-    except Exception as e:
-        return False, f"Validation error: {str(e)}", None
 
 
 def calculate_metrics(

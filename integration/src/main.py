@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Optional
 
 import typer
-import yaml
 from rich.console import Console
 from rich.table import Table
 
@@ -52,6 +51,7 @@ def run_experiment(
     max_workers: int = typer.Option(4, "--max-workers", "-w", help="Maximum parallel workers"),
     max_steps: Optional[int] = typer.Option(None, "--max-steps", help="Maximum steps per trial"),
     todo_tool_enabled: bool = typer.Option(False, "--todo-tool-enabled", help="Enable todo tool"),
+    reasoning_effort: Optional[str] = typer.Option(None, "--reasoning-effort", help="Reasoning effort: low, medium, high (auto-detected for supported models)"),
     runs_dir: Path = typer.Option(Path("runs"), "--runs-dir", "-r", help="Results directory"),
     tasks_dir: Path = typer.Option(Path("tasks"), "--tasks-dir", "-d", help="Tasks directory"),
 ):
@@ -86,10 +86,6 @@ def run_experiment(
     console.print(f"[bold]Timeout per trial:[/bold] {timeout}s\n")
     
     try:
-        task_dir = tasks_dir / task_list[0]
-        with open(task_dir / "task.yaml") as f:
-            task_data = yaml.safe_load(f)
-        
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         run_id = f"{experiment_id}_{task_list[0]}_{model_list[0]}_trial01_{timestamp}"
         
@@ -102,6 +98,7 @@ def run_experiment(
             tasks_dir=tasks_dir,
             max_steps=max_steps,
             todo_tool_enabled=todo_tool_enabled,
+            reasoning_effort=reasoning_effort,
             max_trials=n_trials,
         )
         
