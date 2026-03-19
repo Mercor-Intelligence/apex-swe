@@ -1,0 +1,73 @@
+{
+  "name": "mcp-server-mattermost",
+  "version": "0.1.2",
+  "description": "A Model Context Protocol server for Mattermost",
+  "type": "module",
+  "main": "dist/main.js",
+  "bin": {
+    "mcp-server-mattermost": "dist/main.js"
+  },
+  "scripts": {
+    "start:stdio": "dotenvx run -q -- node dist/main.js --transport stdio",
+    "dev:stdio": "dotenvx run -q -- tsx watch --clear-screen=false src/main.ts --transport stdio",
+    "start:sse": "dotenvx run -q -- node dist/main.js --transport sse",
+    "dev:sse": "dotenvx run -q -- tsx watch --clear-screen=false src/main.ts --transport sse",
+    "start:http": "dotenvx run -q -- node dist/main.js --transport http-stream",
+    "dev:http": "dotenvx run -q -- tsx watch --clear-screen=false src/main.ts --transport http-stream",
+    "build": "tsc",
+    "postbuild": "node -e \"try { require('fs').chmodSync('dist/main.js', 0o755) } catch (e) { /* no-op */ }\"",
+    "lint": "eslint src/**",
+    "lint:fix": "eslint src/** --fix",
+    "format": "prettier --write \"**/*.{ts,json,md,yml,js}\"",
+    "format:check": "prettier --check .",
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "test:watch": "node --import tsx --test --watch tests/**/*.test.ts",
+    "inspect": "npx @modelcontextprotocol/inspector",
+    "fix": "npm format && npm lint:fix"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kakehashi-inc/mcp-server-mattermost.git"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "mattermost",
+    "fetch"
+  ],
+  "author": "kakehashi",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README-ja.md"
+  ],
+  "bugs": {
+    "url": "https://github.com/kakehashi-inc/mcp-server-mattermost/issues"
+  },
+  "homepage": "https://github.com/kakehashi-inc/mcp-server-mattermost#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.13.0",
+    "axios": "^1.10.0",
+    "express": "^5.1.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@dotenvx/dotenvx": "^1.44.2",
+    "@eslint/js": "^9.29.0",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.13.14",
+    "eslint": "^9.29.0",
+    "npm-check-updates": "^18.0.1",
+    "prettier": "^3.5.3",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.34.1"
+  },
+  "overrides": {
+    "esbuild": ">=0.25.0"
+  }
+}

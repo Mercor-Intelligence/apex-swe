@@ -1,0 +1,17 @@
+services:
+  client:
+    platform: "linux/amd64"
+    build:
+      dockerfile: Dockerfile
+    image: ${APEX_TASK_DOCKER_CLIENT_IMAGE_NAME}
+    container_name: ${APEX_TASK_DOCKER_CLIENT_CONTAINER_NAME}
+    environment:
+      - TEST_DIR=${APEX_TEST_DIR}
+    command: [ "sh", "-c", "sleep infinity" ]
+    volumes:
+      - ${APEX_TASK_LOGS_PATH}:${APEX_CONTAINER_LOGS_PATH}
+      - ${APEX_TASK_AGENT_LOGS_PATH}:${APEX_CONTAINER_AGENT_LOGS_PATH}
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
