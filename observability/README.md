@@ -66,7 +66,7 @@ Add a `.dockerignore` file in `tasks/` with the following contents:
 
 ```bash
 # Run a single task with a specific model
-python run_e2e.py --task crankyoldgit-irremoteesp8266-1733-1734-observability --model claude-opus-4-5
+python run_e2e.py --task 0xpolygon-bor-1710-observability --model claude-opus-4-5
 
 # Run with verbose output
 python run_e2e.py --task <task_id> --model claude-opus-4-5 --verbose
