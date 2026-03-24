@@ -96,12 +96,13 @@ python run_e2e.py --all --model claude-opus-4-5 --trials 3 --parallel 4
 # Resume interrupted run
 python run_e2e.py --all --model claude-opus-4-5 --output results/ --resume
 
-# With custom limits
+# With custom limits and reasoning
 python run_e2e.py \
   --task my-task \
   --model claude-opus-4-5 \
   --time-limit 3600 \
-  --message-limit 300
+  --message-limit 300 \
+  --reasoning high
 ```
 
 ---
@@ -191,15 +192,17 @@ observability/
 | `claude-opus-4-6` | Anthropic | claude-opus-4-6 |
 | `claude-opus-4-5` (default) | Anthropic | claude-opus-4-5-20251101 |
 | `claude-sonnet-4-5` | Anthropic | claude-sonnet-4-5-20250929 |
-| `gpt-5.1-codex` | OpenAI | gpt-5.1-codex |
+| `gpt-5.4` | OpenAI | gpt-5.4 |
+| `gpt-5.3-codex` | OpenAI | gpt-5.3-codex |
 | `gpt-5.2-codex` | OpenAI | gpt-5.2-codex |
+| `gpt-5.1-codex` | OpenAI | gpt-5.1-codex |
+| `gemini-3.1-pro` | Google | gemini-3.1-pro-preview |
 | `gemini-3-pro` | Google | gemini-3-pro-preview |
 | `grok-4` | xAI | grok-4 |
 | `kimi-k2` | Fireworks | kimi-k2-instruct-0905 |
 | `kimi-k2p5` | Fireworks | kimi-k2p5 |
 | `qwen3-coder` | Fireworks | qwen3-coder-480b-a35b-instruct |
 | `deepseek-v3` | Fireworks | deepseek-v3-0324 |
-| `cognition` | Cognition | swe-1.5 |
 
 ## Configuration
 
@@ -214,8 +217,6 @@ OPENAI_API_KEY=sk-...
 GOOGLE_API_KEY=...
 XAI_API_KEY=...
 FIREWORKS_API_KEY=...       # Also used for DeepSeek, Kimi, Qwen
-COGNITION_API_KEY=...
-COGNITION_BASE_URL=...
 ```
 
 ### Internal Defaults
@@ -241,6 +242,7 @@ These are the defaults used when no CLI flag or environment variable override is
 | `--trials` | Trials per task (parallel mode) | `1` |
 | `--time-limit` | Time limit in seconds | `3600` |
 | `--message-limit` | Message limit for agent | `250` |
+| `--reasoning` | Reasoning effort level (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`) | `medium` |
 | `--max-retries` | Retries for transient failures | `2` |
 | `--run-timeout` | Per-run timeout in seconds (parallel mode) | None |
 | `--parallel` | Number of parallel workers | `1` |
@@ -272,6 +274,7 @@ result = run_evaluation_sync(
     trial=1,
     time_limit=3600,
     message_limit=250,
+    reasoning="high",
     verbose=True,
 )
 

@@ -13,8 +13,6 @@ Environment Variables:
         GOOGLE_API_KEY - For Gemini models
         XAI_API_KEY - For Grok models
         FIREWORKS_API_KEY - For Kimi, Qwen, DeepSeek models
-        COGNITION_API_KEY - For Cognition models (OpenAI-compatible endpoint)
-        COGNITION_BASE_URL - Base URL for Cognition API endpoint
     
     Optional:
         DEFAULT_MODEL - Default model name (default: claude-opus-4-5)
@@ -135,7 +133,7 @@ class ModelConfig:
     """Configuration for a model."""
     name: str  # Full model name (e.g., "anthropic/claude-opus-4-5-20251101")
     short_name: str  # Short name for display/logs (e.g., "claude-opus-4-5")
-    provider: str  # Provider (anthropic, openai, google, grok, fireworks, cognition)
+    provider: str  # Provider (anthropic, openai, google, grok, fireworks)
     base_url: str | None = None  # Optional custom API base URL (for OpenAI-compatible endpoints)
     
     def __str__(self) -> str:
@@ -162,6 +160,16 @@ MODELS: dict[str, ModelConfig] = {
     ),
     
     # OpenAI
+    "gpt-5.4": ModelConfig(
+        name="openai/gpt-5.4",
+        short_name="gpt-5.4",
+        provider="openai",
+    ),
+    "gpt-5.3-codex": ModelConfig(
+        name="openai/gpt-5.3-codex",
+        short_name="gpt-5.3-codex",
+        provider="openai",
+    ),
     "gpt-5.2-codex": ModelConfig(
         name="openai/gpt-5.2-codex",
         short_name="gpt-5.2-codex",
@@ -172,8 +180,13 @@ MODELS: dict[str, ModelConfig] = {
         short_name="gpt-5.1-codex",
         provider="openai",
     ),
-    
+
     # Google
+    "gemini-3.1-pro": ModelConfig(
+        name="google/gemini-3.1-pro-preview",
+        short_name="gemini-3.1-pro",
+        provider="google",
+    ),
     "gemini-3-pro": ModelConfig(
         name="google/gemini-3-pro-preview",
         short_name="gemini-3-pro",
@@ -212,18 +225,29 @@ MODELS: dict[str, ModelConfig] = {
         short_name="deepseek-v3",
         provider="fireworks",
     ),
-    
-    # Cognition (OpenAI-compatible endpoint)
-    "cognition": ModelConfig(
-        name="openai/swe-1.5",
-        short_name="cognition",
-        provider="cognition",
-        base_url=os.environ.get("COGNITION_BASE_URL"),
-    ),
 }
 
 # Default model
 DEFAULT_MODEL = "claude-opus-4-5"
+
+# =============================================================================
+# REASONING EFFORT
+# =============================================================================
+
+REASONING_EFFORT_LEVELS = ("none", "minimal", "low", "medium", "high", "xhigh")
+
+# Older Anthropic models (Claude 3.7–4.5) use explicit token budgets via
+# reasoning_tokens; Claude 4.6+ uses reasoning_effort directly.
+# We pass both to inspect_eval and let inspect_ai pick the right one.
+ANTHROPIC_REASONING_TOKENS: dict[str, int] = {
+    "minimal": 1024,
+    "low": 4096,
+    "medium": 16_384,
+    "high": 32_000,
+    "xhigh": 65_536,
+}
+
+DEFAULT_REASONING_EFFORT = "medium"
 
 
 def get_model_config(model: str) -> ModelConfig:
@@ -1153,7 +1177,6 @@ def check_api_key(provider: str) -> HealthCheckResult:
         "google": "GOOGLE_API_KEY",
         "grok": "XAI_API_KEY",
         "fireworks": "FIREWORKS_API_KEY",
-        "cognition": "COGNITION_API_KEY",
     }
     
     var_name = key_vars.get(provider.lower())

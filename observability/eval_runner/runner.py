@@ -61,6 +61,8 @@ from eval_runner.config import (
     get_latest_run_dir,
     get_agent_diff_from_run,
     validate_health_checks,
+    ANTHROPIC_REASONING_TOKENS,
+    DEFAULT_REASONING_EFFORT,
 )
 from eval_runner.retry_utils import (
     retry_with_backoff,
@@ -214,13 +216,14 @@ def run_agent_sync(
     custom_scorer: Any = None,
     max_retries: int = 2,
     skip_health_check: bool = False,
+    reasoning: str = DEFAULT_REASONING_EFFORT,
 ) -> AgentRunResult:
     """
     Run an agent evaluation and capture the diff (synchronous).
-    
+
     Uses inspect-ai to execute the agent and capture code changes.
     inspect_eval manages its own event loop, so this must be synchronous.
-    
+
     Args:
         task_id: Task identifier
         model: Model name (short name like "claude-opus-4-5" or full name)
@@ -233,7 +236,8 @@ def run_agent_sync(
                       See module docstring for example.
         max_retries: Number of retries for transient failures (Docker, network)
         skip_health_check: If True, skip pre-flight health checks
-        
+        reasoning: Reasoning effort level (none, minimal, low, medium, high, xhigh)
+
     Returns:
         AgentRunResult with agent's diff and execution details
     """
@@ -387,12 +391,6 @@ def run_agent_sync(
         if model_config.provider == "fireworks":
             model_args["emulate_tools"] = True
         
-        # Handle cognition provider: set API key from environment variable
-        if model_config.provider == "cognition":
-            cognition_api_key = os.environ.get("COGNITION_API_KEY", "")
-            if cognition_api_key:
-                model_args["api_key"] = cognition_api_key
-        
         # Build eval kwargs
         eval_kwargs = {
             "tasks": [task],
@@ -403,7 +401,15 @@ def run_agent_sync(
             "max_subprocesses": 4,
             "log_dir": log_dir,
         }
-        
+
+        # Apply reasoning config — pass both params and let inspect_ai
+        # handle per-provider translation (Claude 4.6+ uses reasoning_effort
+        # directly, older Claude uses reasoning_tokens, OpenAI/Google use
+        # reasoning_effort). See https://inspect.aisi.org.uk/reasoning.html
+        if reasoning and reasoning != "none":
+            eval_kwargs["reasoning_effort"] = reasoning
+            eval_kwargs["reasoning_tokens"] = ANTHROPIC_REASONING_TOKENS.get(reasoning, 16_384)
+
         # Add custom base URL if configured (for OpenAI-compatible endpoints like Cognition)
         if model_config.base_url:
             eval_kwargs["model_base_url"] = model_config.base_url
@@ -512,10 +518,11 @@ async def run_agent(
     time_limit: int = EVAL_DEFAULTS.time_limit,
     message_limit: int = EVAL_DEFAULTS.message_limit,
     log_dir: Optional[str] = None,
+    reasoning: str = DEFAULT_REASONING_EFFORT,
 ) -> AgentRunResult:
     """
     Run an agent evaluation and capture the diff (async wrapper).
-    
+
     Runs the synchronous inspect_eval in a thread pool to avoid event loop conflicts.
     """
     # Use asyncio.get_running_loop() instead of deprecated get_event_loop() (Python 3.12+)
@@ -523,7 +530,7 @@ async def run_agent(
     with concurrent.futures.ThreadPoolExecutor() as executor:
         result = await loop.run_in_executor(
             executor,
-            lambda: run_agent_sync(task_id, model, trial, time_limit, message_limit, log_dir)
+            lambda: run_agent_sync(task_id, model, trial, time_limit, message_limit, log_dir, reasoning=reasoning)
         )
     return result
 
@@ -539,10 +546,11 @@ async def run_evaluation(
     skip_scoring: bool = False,
     verbose: bool = False,
     max_retries: int = 2,
+    reasoning: str = DEFAULT_REASONING_EFFORT,
 ) -> E2EResult:
     """
     Run a complete evaluation: agent + scoring.
-    
+
     Args:
         task_id: Task identifier
         model: Model name (short name or full name)
@@ -554,6 +562,7 @@ async def run_evaluation(
         skip_scoring: If True, only run agent and skip scoring phase
         verbose: Print progress messages
         max_retries: Number of retries for transient failures
+        reasoning: Reasoning effort level (none, minimal, low, medium, high, xhigh)
     """
     start_time = time.time()
     task_logger = get_task_logger(task_id, __name__)
@@ -575,6 +584,7 @@ async def run_evaluation(
         time_limit=time_limit,
         message_limit=message_limit,
         log_dir=log_dir,
+        reasoning=reasoning,
     )
     
     if verbose:

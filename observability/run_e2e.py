@@ -53,6 +53,7 @@ def _run_evaluation_worker(
     message_limit: int,
     max_retries: int,
     start_time: float,
+    reasoning: str = "medium",
 ) -> None:
     """Run a single evaluation in a child process and send result over pipe."""
     from eval_runner import run_evaluation_sync
@@ -66,6 +67,7 @@ def _run_evaluation_worker(
             message_limit=message_limit,
             verbose=False,
             max_retries=max_retries,
+            reasoning=reasoning,
         )
         pipe.send(
             dict(
@@ -162,6 +164,7 @@ def run_single_e2e(
     message_limit: int,
     max_retries: int,
     run_timeout: int | None = None,
+    reasoning: str = "medium",
 ) -> CLIResult:
     """Run a single E2E evaluation (for parallel execution)."""
     from eval_runner import run_evaluation_sync
@@ -183,6 +186,7 @@ def run_single_e2e(
                     message_limit,
                     max_retries,
                     start_time,
+                    reasoning,
                 ),
             )
             proc.start()
@@ -216,6 +220,7 @@ def run_single_e2e(
             message_limit=message_limit,
             verbose=False,
             max_retries=max_retries,
+            reasoning=reasoning,
         )
         return CLIResult(
             task_id=task_id,
@@ -316,10 +321,11 @@ def run_single_mode(args, logger, all_tasks) -> int:
     logger.info("=" * 60)
     logger.info("E2E Evaluation")
     logger.info("=" * 60)
-    logger.info(f"Task:    {args.task}")
-    logger.info(f"Model:   {args.model}")
-    logger.info(f"Trial:   {args.trial}")
-    logger.info(f"Timeout: {args.time_limit}s")
+    logger.info(f"Task:      {args.task}")
+    logger.info(f"Model:     {args.model}")
+    logger.info(f"Trial:     {args.trial}")
+    logger.info(f"Reasoning: {args.reasoning}")
+    logger.info(f"Timeout:   {args.time_limit}s")
     logger.info("=" * 60)
     
     # Run health checks
@@ -343,6 +349,7 @@ def run_single_mode(args, logger, all_tasks) -> int:
             message_limit=args.message_limit,
             max_retries=args.max_retries,
             skip_health_check=True,
+            reasoning=args.reasoning,
         )
         
         logger.info(f"\nAgent Result:")
@@ -369,6 +376,7 @@ def run_single_mode(args, logger, all_tasks) -> int:
             message_limit=args.message_limit,
             verbose=args.verbose,
             max_retries=args.max_retries,
+            reasoning=args.reasoning,
         )
         
         logger.info(f"[2/2] Scoring complete!")
@@ -471,6 +479,7 @@ def run_parallel_mode(args, all_tasks) -> int:
     print("E2E Parallel Evaluation")
     print("=" * 70)
     print(f"Model:      {args.model}")
+    print(f"Reasoning:  {args.reasoning}")
     print(f"Tasks:      {len(task_ids)}")
     print(f"Trials:     {args.trials}")
     print(f"Total runs: {len(work_items)}")
@@ -494,6 +503,7 @@ def run_parallel_mode(args, all_tasks) -> int:
                 args.message_limit,
                 args.max_retries,
                 args.run_timeout,
+                args.reasoning,
             ): (task_id, model, trial)
             for task_id, model, trial in work_items
         }
@@ -588,6 +598,9 @@ Examples:
     parser.add_argument("--trials", type=int, default=1, help="Number of trials per task (parallel mode)")
     parser.add_argument("--time-limit", type=int, default=60*60, help="Time limit in seconds (default: 3600)")
     parser.add_argument("--message-limit", type=int, default=250, help="Message limit for agent (default: 250)")
+    parser.add_argument("--reasoning", default="medium",
+                        choices=["none", "minimal", "low", "medium", "high", "xhigh"],
+                        help="Reasoning effort level (default: medium)")
     parser.add_argument("--max-retries", type=int, default=2, help="Retries for transient failures (default: 2)")
     parser.add_argument(
         "--run-timeout",

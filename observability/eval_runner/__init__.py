@@ -17,6 +17,10 @@ from eval_runner.config import (
     # Models
     MODELS,
     DEFAULT_MODEL,
+    # Reasoning
+    REASONING_EFFORT_LEVELS,
+    ANTHROPIC_REASONING_TOKENS,
+    DEFAULT_REASONING_EFFORT,
     # Task config
     get_all_task_ids,
     load_task_config,
@@ -40,6 +44,10 @@ __all__ = [
     # Models
     "MODELS",
     "DEFAULT_MODEL",
+    # Reasoning
+    "REASONING_EFFORT_LEVELS",
+    "ANTHROPIC_REASONING_TOKENS",
+    "DEFAULT_REASONING_EFFORT",
     # Task config
     "get_all_task_ids",
     "load_task_config",
