@@ -1,4 +1,4 @@
-# ApexCode Observability - E2E Evaluation
+# APEX-SWE Observability - E2E Evaluation
 
 End-to-end evaluation system for AI coding agents on observability tasks.
 
