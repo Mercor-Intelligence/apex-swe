@@ -49,6 +49,9 @@ MODEL_MAX_TOKENS = {
     "gemini/gemini-3.1-pro-preview": 1_000_000,
     "gpt-5.1-codex": 272_000,
     "gpt-5.2": 400_000,
+    "gpt-5.2-codex": 400_000,
+    "gpt-5.3": 400_000,
+    "gpt-5.3-codex": 400_000,
     "gpt-5.4": 272_000,
     "xai/grok-4": 256_000,
 }

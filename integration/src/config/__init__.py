@@ -4,9 +4,11 @@ MODELS_NOT_SUPPORTING_TEMP = [
     "gpt-5",
     "gpt-5-codex",
     "gpt-5.1-codex",
+    "gpt-5.2",
     "gpt-5.2-codex",
+    "gpt-5.3",
     "gpt-5.3-codex",
-    "gpt-5.4-codex",
+    "gpt-5.4",
 ]
 
 # Models that support extended thinking / reasoning
@@ -17,9 +19,11 @@ MODELS_SUPPORTING_REASONING = {
     "o3": "high",
     "gpt-5-codex": "high",
     "gpt-5.1-codex": "high",
+    "gpt-5.2": "high",
     "gpt-5.2-codex": "high",
+    "gpt-5.3": "high",
     "gpt-5.3-codex": "high",
-    "gpt-5.4-codex": "high",
+    "gpt-5.4": "high",
     # xAI: uses reasoning_effort param (same as OpenAI)
     "xai/grok-4": "high",
     # Anthropic: uses thinking param with budget_tokens

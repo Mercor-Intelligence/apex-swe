@@ -89,9 +89,9 @@ apx list-models
 - `gpt-5`
 - `gpt-5-codex`
 - `gpt-5.1-codex`
-- `gpt-5.2-codex`
-- `gpt-5.3-codex`
-- `gpt-5.4-codex`
+- `gpt-5.2` / `gpt-5.2-codex`
+- `gpt-5.3` / `gpt-5.3-codex`
+- `gpt-5.4`
 
 ### Google
 - `gemini/gemini-2.5-pro`
@@ -112,6 +112,7 @@ apx list-models
 - `fireworks_ai/accounts/fireworks/models/qwen3-coder-480b-a35b-instruct`
 - `fireworks_ai/accounts/fireworks/models/deepseek-v3p2`
 - `fireworks_ai/accounts/fireworks/models/kimi-k2-thinking`
+- `fireworks_ai/accounts/fireworks/models/kimi-k2p5`
 
 ## Configuration
 

@@ -41,9 +41,13 @@ class ModelType(str, Enum):
     )
     DEEPSEEK_V3P2 = "fireworks_ai/accounts/fireworks/models/deepseek-v3p2"
     KIMI_K2_THINKING = "fireworks_ai/accounts/fireworks/models/kimi-k2-thinking"
+    KIMI_K2P5 = "fireworks_ai/accounts/fireworks/models/kimi-k2p5"
 
     CLAUDE_OPUS_4_6 = "claude-opus-4-6"
     GPT5_2 = "gpt-5.2"
+    GPT5_2_CODEX = "gpt-5.2-codex"
+    GPT5_3 = "gpt-5.3"
+    GPT5_3_CODEX = "gpt-5.3-codex"
     GPT5_4 = "gpt-5.4"
     GEMINI_3_1_PRO_PREVIEW = "gemini/gemini-3.1-pro-preview"
 
