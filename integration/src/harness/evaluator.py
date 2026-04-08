@@ -3,6 +3,7 @@
 import base64
 import os
 import re
+import shlex
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -105,22 +106,27 @@ class TaskEvaluator:
                     if file_or_dir.is_file():
                         content = file_or_dir.read_text()
                         container_path = f"/tests/{file_or_dir.name}"
+                        safe_path = shlex.quote(container_path)
 
                         encoded_content = base64.b64encode(
                             content.encode("utf-8")
                         ).decode("ascii")
                         docker_manager.exec_command(
-                            f"echo '{encoded_content}' | base64 -d > {container_path}"
+                            f"echo '{encoded_content}' | base64 -d > {safe_path}"
                         )
                         if file_or_dir.suffix == ".sh":
-                            docker_manager.exec_command(f"chmod +x {container_path}")
+                            docker_manager.exec_command(f"chmod +x {safe_path}")
                     elif file_or_dir.is_dir():
                         for test_file in file_or_dir.rglob("*"):
                             if test_file.is_file():
                                 relative_path = test_file.relative_to(task_dir)
                                 container_path = f"/{relative_path}"
+                                safe_path = shlex.quote(container_path)
+                                parent_dir = shlex.quote(
+                                    str(Path(container_path).parent)
+                                )
                                 docker_manager.exec_command(
-                                    f"mkdir -p $(dirname {container_path})"
+                                    f"mkdir -p {parent_dir}"
                                 )
                                 try:
                                     content = test_file.read_text()
@@ -129,18 +135,19 @@ class TaskEvaluator:
                                         content.encode("utf-8")
                                     ).decode("ascii")
                                     docker_manager.exec_command(
-                                        f"echo '{encoded_content}' | base64 -d > {container_path}"
+                                        f"echo '{encoded_content}' | base64 -d > {safe_path}"
                                     )
                                     if test_file.suffix == ".sh":
                                         docker_manager.exec_command(
-                                            f"chmod +x {container_path}"
+                                            f"chmod +x {safe_path}"
                                         )
                                 except Exception:
                                     pass
 
+                safe_script_name = shlex.quote(test_script.name)
                 test_command = (
-                    f"cd /tests && chmod +x /tests/{test_script.name} "
-                    f"&& TEST_DIR=/tests bash /tests/{test_script.name}"
+                    f"cd /tests && chmod +x /tests/{safe_script_name} "
+                    f"&& TEST_DIR=/tests bash /tests/{safe_script_name}"
                 )
                 result = docker_manager.exec_command(test_command, timeout=test_timeout)
 

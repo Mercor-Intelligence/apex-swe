@@ -3,6 +3,7 @@
 import concurrent.futures
 import json
 import logging
+import shlex
 import time
 from datetime import datetime
 from pathlib import Path
@@ -35,6 +36,8 @@ def _ensure_git_baseline(
 ) -> bool:
     """Initialize git inside the container to enable diff capture."""
     try:
+        safe_repo_path = shlex.quote(repo_path)
+
         check_git = docker_manager.exec_command("which git", timeout=5)
         if check_git["exit_code"] != 0:
             if log:
@@ -43,43 +46,43 @@ def _ensure_git_baseline(
 
         is_repo = (
             docker_manager.exec_command(
-                f"cd {repo_path} && git rev-parse --is-inside-work-tree",
+                f"cd {safe_repo_path} && git rev-parse --is-inside-work-tree",
                 timeout=5,
             )["exit_code"]
             == 0
         )
 
         if not is_repo:
-            docker_manager.exec_command(f"cd {repo_path} && git init", timeout=10)
+            docker_manager.exec_command(f"cd {safe_repo_path} && git init", timeout=10)
             docker_manager.exec_command(
-                f"cd {repo_path} && git config user.email 'apex@eval.local'", timeout=5
+                f"cd {safe_repo_path} && git config user.email 'apex@eval.local'", timeout=5
             )
             docker_manager.exec_command(
-                f"cd {repo_path} && git config user.name 'APEX Evaluator'", timeout=5
+                f"cd {safe_repo_path} && git config user.name 'APEX Evaluator'", timeout=5
             )
 
         # Ensure we have a baseline commit and include any newly copied files
         head_exists = (
             docker_manager.exec_command(
-                f"cd {repo_path} && git rev-parse --verify HEAD", timeout=5
+                f"cd {safe_repo_path} && git rev-parse --verify HEAD", timeout=5
             )["exit_code"]
             == 0
         )
         if not head_exists:
-            docker_manager.exec_command(f"cd {repo_path} && git add -A", timeout=60)
+            docker_manager.exec_command(f"cd {safe_repo_path} && git add -A", timeout=60)
             docker_manager.exec_command(
-                f"cd {repo_path} && git commit -m 'Baseline state for APEX evaluation' --allow-empty",
+                f"cd {safe_repo_path} && git commit -m 'Baseline state for APEX evaluation' --allow-empty",
                 timeout=60,
             )
         else:
             # If the working tree is dirty (newly copied task files), commit them to baseline
             status = docker_manager.exec_command(
-                f"cd {repo_path} && git status --porcelain", timeout=30
+                f"cd {safe_repo_path} && git status --porcelain", timeout=30
             )
             if status.get("stdout", "").strip():
-                docker_manager.exec_command(f"cd {repo_path} && git add -A", timeout=60)
+                docker_manager.exec_command(f"cd {safe_repo_path} && git add -A", timeout=60)
                 docker_manager.exec_command(
-                    f"cd {repo_path} && git commit -m 'Baseline state for APEX evaluation' --allow-empty",
+                    f"cd {safe_repo_path} && git commit -m 'Baseline state for APEX evaluation' --allow-empty",
                     timeout=60,
                 )
 
@@ -95,15 +98,16 @@ def _capture_agent_patch(
 ) -> bool:
     """Write git diff to agent.patch inside the task log directory."""
     try:
-        docker_manager.exec_command(f"cd {repo_path} && git add -A", timeout=60)
+        safe_repo_path = shlex.quote(repo_path)
+        docker_manager.exec_command(f"cd {safe_repo_path} && git add -A", timeout=60)
         diff_result = docker_manager.exec_command(
-            f"cd {repo_path} && git diff --cached HEAD", timeout=30
+            f"cd {safe_repo_path} && git diff --cached HEAD", timeout=30
         )
         patch_text = diff_result.get("stdout", "")
         if not patch_text.strip():
             # Try non-cached diff as fallback
             diff_result = docker_manager.exec_command(
-                f"cd {repo_path} && git diff HEAD", timeout=30
+                f"cd {safe_repo_path} && git diff HEAD", timeout=30
             )
             patch_text = diff_result.get("stdout", "")
 
@@ -223,8 +227,9 @@ class MultiStepRunner:
                     if logger:
                         logger._log(f"Required MCP requirements: {', '.join(requirements)}")
                     req_text = "\n".join(requirements) + "\n"
+                    safe_req_text = shlex.quote(req_text)
                     docker_manager.exec_command(
-                        f"mkdir -p /config && printf '%s' '{req_text}' > /config/mcp-required.txt.tmp && mv /config/mcp-required.txt.tmp /config/mcp-required.txt"
+                        f"mkdir -p /config && printf '%s' {safe_req_text} > /config/mcp-required.txt.tmp && mv /config/mcp-required.txt.tmp /config/mcp-required.txt"
                     )
             except Exception as e:
                 if logger:
