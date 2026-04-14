@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import shlex
 from datetime import datetime
 from pathlib import Path
@@ -102,6 +103,75 @@ def extract_test_patch_targets(patch_content: str) -> tuple[list[str], list[str]
         i += 1
     
     return existing_files, new_files
+
+
+def evaluate_process_from_messages(
+    state: TaskState,
+    process_checks: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Analyze agent conversation messages for expected service interactions.
+
+    Extracts all text from the inspect-ai TaskState messages (including tool
+    call commands and tool results) and checks for evidence of service usage.
+
+    Args:
+        state: The inspect-ai TaskState containing conversation messages
+        process_checks: List of check dicts with service, description, required, pattern
+
+    Returns:
+        Dict with checks, totals, and pass/fail summary
+    """
+    # Serialize all messages to a single searchable string
+    parts: list[str] = []
+    for msg in getattr(state, "messages", []):
+        # Handle string content
+        content = getattr(msg, "content", "")
+        if isinstance(content, str):
+            parts.append(content)
+        elif isinstance(content, list):
+            for block in content:
+                if isinstance(block, str):
+                    parts.append(block)
+                else:
+                    # ContentBlock objects — extract text/tool_call fields
+                    parts.append(str(block))
+        # Also capture tool_calls on assistant messages
+        for tc in getattr(msg, "tool_calls", []) or []:
+            parts.append(str(tc))
+    combined = " ".join(parts).lower()
+
+    results = []
+    for check in process_checks:
+        service = check.get("service", "").lower()
+        description = check.get("description", f"Agent interacted with {service}")
+        required = check.get("required", True)
+        pattern = check.get("pattern", "")
+
+        found = service in combined
+        if found and pattern:
+            found = bool(re.search(pattern.lower(), combined))
+
+        results.append({
+            "service": service,
+            "description": description,
+            "required": required,
+            "passed": found,
+        })
+
+    total = len(results)
+    passed = sum(1 for r in results if r["passed"])
+    required_checks = [r for r in results if r["required"]]
+    required_passed = sum(1 for r in required_checks if r["passed"])
+    required_total = len(required_checks)
+
+    return {
+        "checks": results,
+        "total": total,
+        "passed": passed,
+        "required_passed": required_passed,
+        "required_total": required_total,
+        "all_required_passed": required_passed == required_total,
+    }
 
 
 def save_run_outputs(
@@ -525,28 +595,51 @@ done
             },
         )
 
+        # Process verification: check agent interacted with required services
+        process_verification = None
+        try:
+            process_checks = metadata.get("process_checks")
+            if not process_checks and task_dir:
+                import yaml
+                task_yaml_path = Path(task_dir) / "task.yaml"
+                if task_yaml_path.exists():
+                    task_yaml = yaml.safe_load(task_yaml_path.read_text(encoding="utf-8"))
+                    process_checks = task_yaml.get("process_checks")
+            if process_checks:
+                process_verification = evaluate_process_from_messages(state, process_checks)
+                task_logger.info(
+                    f"Process verification: {process_verification['passed']}/{process_verification['total']} checks passed "
+                    f"(required: {process_verification['required_passed']}/{process_verification['required_total']})"
+                )
+        except Exception as e:
+            task_logger.warning(f"Process verification failed: {e}")
+
+        score_metadata = {
+            "task_id": task_id,
+            "run_id": run_id,
+            "passed_required": passed_required,
+            "failed_required": failed_required,
+            "missing_required": missing_required,
+            "regressed_tests": regressed_tests,
+            "total_parsed": len(test_results.parsed_results),
+            "exit_code": test_exit_code,
+            "f2p_from_cache": f2p_from_cache,
+            "f2p_count": test_results.f2p_total,
+            "p2p_count": test_results.p2p_total,
+            "p2p_passed": test_results.p2p_passed,
+            "agent_diff": agent_diff,
+            "changed_files": changed_files,
+            "test_patch_applied": test_patch_applied,
+            "output_dir": output_dir,
+        }
+        if process_verification:
+            score_metadata["process_verification"] = process_verification
+
         return Score(
             value=score_value,
             answer=f"{test_results.f2p_passed}/{test_results.f2p_total} FAIL_TO_PASS tests passed",
             explanation="\n".join(explanation_parts),
-            metadata={
-                "task_id": task_id,
-                "run_id": run_id,
-                "passed_required": passed_required,
-                "failed_required": failed_required,
-                "missing_required": missing_required,
-                "regressed_tests": regressed_tests,
-                "total_parsed": len(test_results.parsed_results),
-                "exit_code": test_exit_code,
-                "f2p_from_cache": f2p_from_cache,
-                "f2p_count": test_results.f2p_total,
-                "p2p_count": test_results.p2p_total,
-                "p2p_passed": test_results.p2p_passed,
-                "agent_diff": agent_diff,
-                "changed_files": changed_files,
-                "test_patch_applied": test_patch_applied,
-                "output_dir": output_dir,
-            },
+            metadata=score_metadata,
         )
 
     return score

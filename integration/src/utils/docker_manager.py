@@ -593,6 +593,7 @@ class DockerComposeManager:
             flush=True,
         )
         start_time = time.time()
+        self._healthy_services: set[str] = set()
 
         # Parse docker-compose to get list of services
         try:
@@ -661,6 +662,7 @@ class DockerComposeManager:
                                 f"[DOCKER] ✅ All services healthy after {elapsed:.1f}s",
                                 flush=True,
                             )
+                            self._healthy_services = healthy_services
                             return
 
                     except json.JSONDecodeError:
@@ -669,7 +671,8 @@ class DockerComposeManager:
                 # Wait before next check
                 time.sleep(check_interval)
 
-            # Timeout reached
+            # Timeout reached — store whatever became healthy
+            self._healthy_services = healthy_services
             elapsed = time.time() - start_time
             unhealthy = set(services_with_health) - healthy_services
             if unhealthy:
@@ -684,6 +687,10 @@ class DockerComposeManager:
         except Exception as e:
             logger.warning(f"Failed to check service health: {e}")
             print(f"[DOCKER] ⚠️  Could not verify service health: {e}", flush=True)
+
+    def get_healthy_services(self) -> set[str]:
+        """Return the set of service names that passed health checks during startup."""
+        return getattr(self, "_healthy_services", set())
 
     def _inject_default_healthchecks(self) -> None:
         """Inject default healthchecks for common services if not present."""

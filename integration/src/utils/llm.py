@@ -10,7 +10,7 @@ from litellm.exceptions import (
     AuthenticationError as LiteLLMAuthenticationError,
     ContextWindowExceededError as LiteLLMContextWindowExceededError,
 )
-from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
+from tenacity import before_sleep_log, retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 from src.config import (
     ANTHROPIC_THINKING_BUDGETS,
@@ -130,6 +130,7 @@ class LiteLLM:
         retry=retry_if_not_exception_type(
             (ContextLengthExceededError, OutputLengthExceededError, LiteLLMAuthenticationError)
         ),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
     )
     def call(self, prompt: str, **kwargs) -> str:
         """Call the LLM with a prompt and return the response."""
@@ -168,6 +169,13 @@ class LiteLLM:
 
         except LiteLLMContextWindowExceededError:
             raise ContextLengthExceededError
+        except (LiteLLMAuthenticationError, ContextLengthExceededError, OutputLengthExceededError):
+            raise  # Let these propagate without extra logging
+        except Exception as e:
+            logger.error(
+                f"LLM call failed for model={self.model_name}: {type(e).__name__}: {e}"
+            )
+            raise
 
     def count_tokens(self, messages: list[dict]) -> int:
         """Count tokens in messages."""

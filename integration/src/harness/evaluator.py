@@ -1,6 +1,7 @@
 """Apex-Code evaluation system - simple pass/fail based on test scripts."""
 
 import base64
+import json
 import os
 import re
 import subprocess
@@ -382,6 +383,105 @@ Test Result: {"PASSED" if test_passed else "FAILED" if test_passed is False else
                 if total_count > 0
                 else 0.0,
             },
+        }
+
+    def evaluate_process(
+        self,
+        log_dir: Path,
+        process_checks: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """
+        Evaluate agent process by analyzing tool-call logs against expected service interactions.
+
+        Reads all debug.json files from the agent-logs directory and checks whether
+        the agent interacted with the services specified in process_checks.
+
+        Args:
+            log_dir: The task log directory containing agent-logs/
+            process_checks: List of check definitions from task.yaml, each with:
+                - service: service name to search for in tool calls (e.g., "mattermost")
+                - description: human-readable description of what's being checked
+                - required: whether this check is mandatory (default True)
+                - pattern: optional additional regex pattern to match in tool calls
+
+        Returns:
+            dict with:
+                - checks: list of individual check results
+                - total: number of checks
+                - passed: number of checks that passed
+                - required_passed: number of required checks that passed
+                - required_total: number of required checks
+                - all_required_passed: bool
+        """
+        logger = get_logger()
+
+        # Collect all tool calls from all episodes
+        all_tool_calls = []
+        all_commands = []
+        agent_logs_dir = log_dir / "agent-logs"
+
+        if agent_logs_dir.exists():
+            for episode_dir in sorted(agent_logs_dir.iterdir()):
+                debug_path = episode_dir / "debug.json"
+                if debug_path.exists():
+                    try:
+                        debug_data = json.loads(debug_path.read_text())
+                        all_tool_calls.extend(debug_data.get("tool_calls", []))
+                        all_commands.extend(debug_data.get("commands", []))
+                    except (json.JSONDecodeError, IOError):
+                        continue
+
+        if logger:
+            logger._log(
+                f"Process evaluation: found {len(all_tool_calls)} tool calls, "
+                f"{len(all_commands)} commands across episodes"
+            )
+
+        # Serialize all tool calls to searchable text
+        tool_calls_text = json.dumps(all_tool_calls, default=str).lower()
+        commands_text = json.dumps(all_commands, default=str).lower()
+        combined_text = tool_calls_text + " " + commands_text
+
+        results = []
+        for check in process_checks:
+            service = check.get("service", "").lower()
+            description = check.get("description", f"Agent interacted with {service}")
+            required = check.get("required", True)
+            pattern = check.get("pattern", "")
+
+            # Check if service name appears in tool calls or commands
+            found = service in combined_text
+
+            # If there's an additional pattern, check that too
+            if found and pattern:
+                found = bool(re.search(pattern.lower(), combined_text))
+
+            result = {
+                "service": service,
+                "description": description,
+                "required": required,
+                "passed": found,
+            }
+            results.append(result)
+
+            if logger:
+                status = "PASS" if found else "FAIL"
+                req_label = " (required)" if required else " (optional)"
+                logger._log(f"  Process check [{status}]{req_label}: {description}")
+
+        total = len(results)
+        passed = sum(1 for r in results if r["passed"])
+        required_checks = [r for r in results if r["required"]]
+        required_passed = sum(1 for r in required_checks if r["passed"])
+        required_total = len(required_checks)
+
+        return {
+            "checks": results,
+            "total": total,
+            "passed": passed,
+            "required_passed": required_passed,
+            "required_total": required_total,
+            "all_required_passed": required_passed == required_total,
         }
 
     def format_evaluation_report(self, evaluation_results: dict[str, Any]) -> str:

@@ -151,6 +151,8 @@ class EvaluationExecutor:
         max_agent_timeout_sec = 1800  # Default: 30 minutes
         max_test_timeout_sec = None
 
+        process_checks = None
+
         if task_yaml_path.exists():
             try:
                 with open(task_yaml_path) as f:
@@ -158,6 +160,7 @@ class EvaluationExecutor:
                 instruction = task_data.get("instruction", instruction)
                 max_agent_timeout_sec = task_data.get("max_agent_timeout_sec")
                 max_test_timeout_sec = task_data.get("max_test_timeout_sec")
+                process_checks = task_data.get("process_checks")
             except Exception:
                 pass
 
@@ -214,6 +217,7 @@ class EvaluationExecutor:
             max_agent_timeout_sec=max_agent_timeout_sec,
             max_test_timeout_sec=max_test_timeout_sec,
             max_steps=getattr(config, "max_steps", None),
+            process_checks=process_checks,
         )
 
     def _get_llm(

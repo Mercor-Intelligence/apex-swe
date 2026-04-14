@@ -1,3 +1,4 @@
+import html
 import json
 import re
 import time
@@ -238,7 +239,7 @@ class ToolExecutor:
             self._log(logs, f"\nFound {len(keystrokes_matches)} keystrokes commands")
             # Execute keystrokes directly without JSON conversion
             for keystroke_command in keystrokes_matches:
-                clean_command = keystroke_command.strip()
+                clean_command = html.unescape(keystroke_command.strip())
                 if clean_command:
                     # Execute directly as terminal command
                     logger = get_logger()
@@ -304,11 +305,11 @@ class ToolExecutor:
                 # Convert bash commands to tool call format
                 for bash_command in bash_matches:
                     # Clean up the command (remove empty lines, strip whitespace)
-                    clean_command = "\n".join(
+                    clean_command = html.unescape("\n".join(
                         line.strip()
                         for line in bash_command.split("\n")
                         if line.strip()
-                    )
+                    ))
                     if clean_command:
                         tool_call = {"tool": "terminal", "command": clean_command}
                         matches.append(json.dumps(tool_call))
@@ -338,7 +339,7 @@ class ToolExecutor:
                 exec_start = time.time()
                 if tool_name == "terminal":
                     result = self.execute(
-                        "terminal", command=tool_call.get("command", "")
+                        "terminal", command=html.unescape(tool_call.get("command", ""))
                     )
                     # Log completion with duration if Apex-Code logger is available
                     if logger and "command" in tool_call:

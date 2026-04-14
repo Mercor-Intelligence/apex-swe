@@ -99,6 +99,11 @@ class TaskContext(BaseModel):
     max_steps: int | None = Field(
         None, description="Max steps for multi-step execution (None = unlimited)"
     )
+    process_checks: list[dict[str, Any]] | None = Field(
+        None,
+        description="Process verification checks from task.yaml — defines which services "
+        "the agent must interact with during execution",
+    )
 
     class Config:
         arbitrary_types_allowed = True

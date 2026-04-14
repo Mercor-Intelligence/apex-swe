@@ -219,6 +219,27 @@ class MultiStepRunner:
             try:
                 requirements = docker_manager.get_required_mcp_requirements()
                 if requirements:
+                    # Filter requirements to only include services that are actually healthy
+                    healthy = docker_manager.get_healthy_services()
+                    if healthy:
+                        from src.config import SERVICES_WITH_MCP
+                        # Build reverse map: MCP token -> service names that produce it
+                        token_to_services = {}
+                        for svc, token in SERVICES_WITH_MCP.items():
+                            token_to_services.setdefault(token, []).append(svc)
+
+                        original_requirements = list(requirements)
+                        requirements = [
+                            req for req in requirements
+                            if any(svc in healthy for svc in token_to_services.get(req, []))
+                        ]
+                        skipped = set(original_requirements) - set(requirements)
+                        if skipped:
+                            msg = f"Skipping MCP requirements for unhealthy services: {', '.join(skipped)}"
+                            print(f"[MCP] ⚠️  {msg}")
+                            if logger:
+                                logger._log(msg)
+
                     print(f"Required MCP requirements: {', '.join(requirements)}")
                     if logger:
                         logger._log(f"Required MCP requirements: {', '.join(requirements)}")
@@ -230,9 +251,11 @@ class MultiStepRunner:
                 if logger:
                     logger._log(f"Failed to write mcp-required.txt: {e}")
 
-            # Wait for MCP config to be ready
+            # Wait for MCP config to be ready (5s intervals, 60 iterations = 5 min max)
             mcp_ready = False
-            for i in range(120):
+            max_polls = 60
+            poll_interval = 5
+            for i in range(max_polls):
                 try:
                     result = docker_manager._container.exec_run(
                         cmd=["sh", "-lc", "sh /app/wait-for-mcp-config.sh"]
@@ -243,22 +266,22 @@ class MultiStepRunner:
                             logger._log("MCP config is ready and task can begin")
                         break
                     else:
-                        print("MCP config is not ready, waiting for 10 seconds")
+                        print(f"MCP config is not ready, waiting for {poll_interval} seconds")
                         if logger:
-                            logger._log("MCP config is not ready, waiting for 10 seconds")
+                            logger._log(f"MCP config is not ready, waiting for {poll_interval} seconds")
                 except Exception as e:
                     if logger:
                         logger._log(f"⚠️ MCP config check failed: {e}")
-                if logger and i % 6 == 0:
+                if logger and i % 12 == 0:
                     logger._log(
-                        f"⏳ Waiting for API keys in MCP config to be ready... ({i + 1}/120)"
+                        f"⏳ Waiting for API keys in MCP config to be ready... ({i + 1}/{max_polls})"
                     )
-                time.sleep(10)
+                time.sleep(poll_interval)
 
             if not mcp_ready:
                 if logger:
-                    logger._log("MCP config not ready after 20 minutes, aborting task execution")
-                raise RuntimeError("MCP configuration not ready after 20 minutes")
+                    logger._log(f"MCP config not ready after {max_polls * poll_interval // 60} minutes, aborting task execution")
+                raise RuntimeError(f"MCP configuration not ready after {max_polls * poll_interval // 60} minutes")
 
         return git_ready
 
@@ -522,6 +545,29 @@ class MultiStepRunner:
 
         if task_logger:
             task_logger.log_evaluation_result(evaluation_result)
+
+        # Run process verification if task defines process_checks
+        process_checks = getattr(task_context, "process_checks", None)
+        if process_checks and task_logger:
+            if logger:
+                logger._log("Running process verification (tool-call log analysis)")
+            process_result = evaluator.evaluate_process(
+                task_logger.log_dir, process_checks
+            )
+            evaluation_result["process_verification"] = process_result
+
+            # Save process results alongside test results
+            try:
+                process_path = task_logger.log_dir / "process_results.json"
+                process_path.write_text(json.dumps(process_result, indent=2, default=str))
+                if logger:
+                    logger._log(
+                        f"Process verification: {process_result['passed']}/{process_result['total']} checks passed "
+                        f"({process_result['required_passed']}/{process_result['required_total']} required)"
+                    )
+            except Exception as e:
+                if logger:
+                    logger._log(f"Failed to write process_results.json: {e}")
 
         # Capture post-test artifacts
         terminal_manager.capture_pane_safely(tool_executor, task_logger, "post-test.txt")
