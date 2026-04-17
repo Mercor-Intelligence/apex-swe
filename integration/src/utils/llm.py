@@ -91,6 +91,7 @@ class LiteLLM:
         self.api_key = api_key
         self.conversation_history: list[dict[str, Any]] = []
         self.total_tokens_used = 0
+        self._last_response_metadata: dict = {}
 
         # Set reasoning effort (explicit > config default > None)
         self.reasoning_effort = reasoning_effort
@@ -165,6 +166,12 @@ class LiteLLM:
                     completion_kwargs["reasoning_effort"] = self.reasoning_effort
 
             response = litellm.completion(**completion_kwargs)
+            self._last_response_metadata = {
+                "cost_usd": float(getattr(response, "_hidden_params", {}).get("response_cost", 0.0) or 0.0),
+                "latency_ms": int(getattr(response, "_response_ms", 0) or 0),
+                "tokens_in": int(getattr(response.usage, "prompt_tokens", 0) if hasattr(response, "usage") else 0),
+                "tokens_out": int(getattr(response.usage, "completion_tokens", 0) if hasattr(response, "usage") else 0),
+            }
             return response.choices[0].message.content
 
         except LiteLLMContextWindowExceededError:
@@ -183,6 +190,10 @@ class LiteLLM:
             return litellm.utils.token_counter(self.model_name, messages)
         except Exception:
             return sum(len(str(msg.get("content", ""))) for msg in messages) // 4
+
+    def get_last_response_metadata(self) -> dict:
+        """Return metadata from the most recent call() (cost, latency, tokens). Empty if none."""
+        return dict(self._last_response_metadata)
 
     def add_to_conversation(self, user_message: str, assistant_message: str) -> None:
         """Add a user-assistant exchange to conversation history."""

@@ -3,9 +3,11 @@
 import concurrent.futures
 import json
 import logging
+import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+from pathlib import Path as _Path
 from typing import Any
 
 import psutil
@@ -27,7 +29,19 @@ from src.utils.harness_utils import (
     setup_task_environment,
 )
 
+# Wire common/ into sys.path for import. Safe to run multiple times.
+_REPO_ROOT = _Path(__file__).resolve().parent.parent.parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from common.trajectory import TrajectoryWriter  # noqa: E402
+
 logger = logging.getLogger(__name__)
+
+
+def _ts_now() -> str:
+    """Return current UTC time as ISO-8601 string with 'Z' suffix."""
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def _ensure_git_baseline(
@@ -140,6 +154,8 @@ class MultiStepRunner:
         monitor_memory: bool = True,
         log_level: str = "INFO",
         todo_tool_enabled: bool = False,
+        *,
+        trajectory_writer: "TrajectoryWriter | None" = None,
     ):
         """
         Initialize multi-step runner.
@@ -150,12 +166,107 @@ class MultiStepRunner:
             monitor_memory: Whether to monitor memory usage
             log_level: Logging level for execution logs
             todo_tool_enabled: Whether to enable the todo tool
+            trajectory_writer: Optional TrajectoryWriter for emitting trajectory events.
+                If None, emission helpers become no-ops.
         """
         self.llm = llm
         self.max_steps = max_steps
         self.monitor_memory = monitor_memory
         self.todo_tool_enabled = todo_tool_enabled
         self.log_level = log_level
+        self.trajectory_writer = trajectory_writer
+
+    def _emit_reasoning(
+        self,
+        *,
+        step: int,
+        content: str,
+        tokens_in: int,
+        tokens_out: int,
+        latency_ms: int,
+        cost_usd: float,
+        ts: str,
+    ) -> None:
+        if self.trajectory_writer is None:
+            return
+        self.trajectory_writer.write(
+            step=step,
+            ts=ts,
+            type="reasoning",
+            content=content,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            latency_ms=latency_ms,
+            cost_usd=cost_usd,
+        )
+
+    def _emit_tool_call(
+        self,
+        *,
+        step: int,
+        tool: str,
+        args: dict,
+        call_id: str,
+        ts: str,
+    ) -> None:
+        if self.trajectory_writer is None:
+            return
+        self.trajectory_writer.write(
+            step=step,
+            ts=ts,
+            type="tool_call",
+            tool=tool,
+            args=args,
+            call_id=call_id,
+        )
+
+    def _emit_tool_result(
+        self,
+        *,
+        step: int,
+        call_id: str,
+        status: str,
+        exit_code: int,
+        stdout_bytes: int,
+        content: str,
+        ts: str,
+    ) -> None:
+        if self.trajectory_writer is None:
+            return
+        self.trajectory_writer.write(
+            step=step,
+            ts=ts,
+            type="tool_result",
+            call_id=call_id,
+            status=status,
+            exit_code=exit_code,
+            stdout_bytes=stdout_bytes,
+            content=content,
+        )
+
+    def _emit_completion(
+        self,
+        *,
+        step: int,
+        signal: str,
+        total_tokens_in: int,
+        total_tokens_out: int,
+        total_cost_usd: float,
+        wall_time_s: float,
+        ts: str,
+    ) -> None:
+        if self.trajectory_writer is None:
+            return
+        self.trajectory_writer.write(
+            step=step,
+            ts=ts,
+            type="completion",
+            signal=signal,
+            total_tokens_in=total_tokens_in,
+            total_tokens_out=total_tokens_out,
+            total_cost_usd=total_cost_usd,
+            wall_time_s=wall_time_s,
+        )
 
     def calculate_max_memory(self, steps: list[dict[str, Any]]) -> int | None:
         """Calculate maximum memory usage across all steps."""
@@ -336,6 +447,7 @@ class MultiStepRunner:
 
         step_num = 0
         episode_task_logger = None
+        completion_signal = "task_complete"
 
         while True:
             step_num += 1
@@ -345,12 +457,14 @@ class MultiStepRunner:
             if elapsed_time > max_timeout:
                 if logger:
                     logger._log(f"Reached timeout limit ({max_timeout}s)")
+                completion_signal = "timeout"
                 break
 
             # Check max steps
             if effective_max_steps and step_num > effective_max_steps:
                 if logger:
                     logger._log(f"Reached maximum steps limit ({effective_max_steps})")
+                completion_signal = "max_steps"
                 break
 
             # Check token limits
@@ -402,6 +516,18 @@ class MultiStepRunner:
                 [{"role": "assistant", "content": response_content}]
             )
 
+            # Emit trajectory reasoning event
+            _llm_meta = self.llm.get_last_response_metadata() if hasattr(self.llm, "get_last_response_metadata") else {}
+            self._emit_reasoning(
+                step=step_num,
+                content=response_content,
+                tokens_in=_llm_meta.get("tokens_in") or input_tokens,
+                tokens_out=_llm_meta.get("tokens_out") or output_tokens,
+                latency_ms=_llm_meta.get("latency_ms", 0),
+                cost_usd=_llm_meta.get("cost_usd", 0.0),
+                ts=_ts_now(),
+            )
+
             response = {
                 "content": response_content,
                 "metadata": {
@@ -438,6 +564,30 @@ class MultiStepRunner:
             # Execute tools
             logs = []  # Local logs for this step
             tool_results = tool_executor.parse_and_execute_tools(response.get("content", ""), logs)
+
+            # Emit trajectory tool_call + tool_result for each tool
+            from uuid import uuid4 as _uuid4
+            for _tr in tool_results:
+                _call_id = f"c_{_uuid4().hex[:8]}"
+                _tool_name = _tr.get("tool", "unknown")
+                _call_args = _tr.get("call", {}) if isinstance(_tr.get("call"), dict) else {"raw": _tr.get("call")}
+                self._emit_tool_call(
+                    step=step_num,
+                    tool=_tool_name,
+                    args=_call_args,
+                    call_id=_call_id,
+                    ts=_ts_now(),
+                )
+                _result_str = str(_tr.get("result", ""))
+                self._emit_tool_result(
+                    step=step_num,
+                    call_id=_call_id,
+                    status="success",  # parse_and_execute_tools doesn't report status; default success
+                    exit_code=0,
+                    stdout_bytes=len(_result_str.encode("utf-8")),
+                    content=_result_str,
+                    ts=_ts_now(),
+                )
 
             if episode_task_logger and tool_results:
                 for tool_result in tool_results:
@@ -479,6 +629,22 @@ class MultiStepRunner:
                 break
 
         print("Agent completed.")
+
+        # Emit trajectory completion event
+        _wall_time = (datetime.now() - start_time).total_seconds()
+        # Sum totals from the steps list — steps[i]["agent_response"]["metadata"] has input/output tokens
+        _total_in = sum(s.get("agent_response", {}).get("metadata", {}).get("input_tokens", 0) for s in steps)
+        _total_out = sum(s.get("agent_response", {}).get("metadata", {}).get("output_tokens", 0) for s in steps)
+        # Cost: we don't track cumulative cost — use 0.0 for now (best-effort; single-call LLM cost is in last metadata)
+        self._emit_completion(
+            step=step_num + 1,
+            signal=completion_signal,
+            total_tokens_in=_total_in,
+            total_tokens_out=_total_out,
+            total_cost_usd=0.0,  # TODO: accumulate from per-step metadata in future task
+            wall_time_s=_wall_time,
+            ts=_ts_now(),
+        )
 
     def _post_execution_evaluation(
         self,
