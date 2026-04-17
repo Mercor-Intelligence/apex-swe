@@ -528,3 +528,59 @@ Test Result: {"PASSED" if test_passed else "FAILED" if test_passed is False else
             report.append("")
 
         return "\n".join(report)
+
+    def write_layer_results(
+        self,
+        *,
+        task_dir,
+        trial_dir,
+        trial: int,
+        task: str,
+        model: str,
+        wall_time_s: float,
+        total_cost_usd: float,
+        total_tokens_in: int,
+        total_tokens_out: int,
+        completion_signal: str,
+        f2p_tests,
+        p2p_tests,
+        test_results,
+        test_durations_ms,
+        test_errors,
+    ) -> None:
+        """Produce trial_dir/results.json using LayerEvaluator.
+
+        If task_dir/test_layers.json exists, uses it; otherwise falls back
+        to F2P/P2P layers. Tests not present in test_results are marked
+        ERROR (missing keys default to ERROR per LayerEvaluator.evaluate).
+        """
+        import sys as _sys
+        from pathlib import Path as _Path
+
+        _REPO = _Path(__file__).resolve().parent.parent.parent.parent
+        if str(_REPO) not in _sys.path:
+            _sys.path.insert(0, str(_REPO))
+        from common.layers import LayerEvaluator
+
+        evaluator = LayerEvaluator(
+            task_dir=task_dir,
+            f2p_tests=list(f2p_tests),
+            p2p_tests=list(p2p_tests),
+        )
+        layers = evaluator.load_layers()
+        evaluated = evaluator.evaluate(
+            layers, test_results, test_durations_ms, test_errors,
+        )
+        _Path(trial_dir).mkdir(parents=True, exist_ok=True)
+        evaluator.write_results(
+            _Path(trial_dir) / "results.json",
+            trial=trial,
+            task=task,
+            model=model,
+            wall_time_s=wall_time_s,
+            total_cost_usd=total_cost_usd,
+            total_tokens_in=total_tokens_in,
+            total_tokens_out=total_tokens_out,
+            completion_signal=completion_signal,
+            layers=evaluated,
+        )
