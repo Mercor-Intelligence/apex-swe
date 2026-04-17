@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "layers": [
+    {
+      "name": "F2P",
+      "description": "Fail-to-Pass tests from golden patch",
+      "tests": ["@F2P"],
+      "threshold": { "pass^k": 1.0 }
+    },
+    {
+      "name": "P2P",
+      "description": "Pass-to-Pass tests — no regressions allowed",
+      "tests": ["@P2P"],
+      "threshold": { "pass^k": 1.0 }
+    }
+  ]
+}
