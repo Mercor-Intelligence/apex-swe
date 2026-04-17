@@ -118,3 +118,32 @@ class LayerEvaluator:
                 "layer_passed": pass_count == len(layer.tests),
             })
         return output
+
+    def write_results(
+        self,
+        path: Path | str,
+        *,
+        trial: int,
+        task: str,
+        model: str,
+        wall_time_s: float,
+        total_cost_usd: float,
+        total_tokens_in: int,
+        total_tokens_out: int,
+        completion_signal: str,
+        layers: list[dict],
+    ) -> None:
+        out = {
+            "trial": trial,
+            "task": task,
+            "model": model,
+            "wall_time_s": wall_time_s,
+            "total_cost_usd": total_cost_usd,
+            "total_tokens_in": total_tokens_in,
+            "total_tokens_out": total_tokens_out,
+            "completion_signal": completion_signal,
+            "layers": layers,
+        }
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(out, indent=2) + "\n")

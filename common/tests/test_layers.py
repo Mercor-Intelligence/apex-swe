@@ -122,3 +122,39 @@ class TestEvaluate:
         evaluated = ev.evaluate(layers, {}, durations_ms={}, errors={})
         assert evaluated[0]["tests"][0]["status"] == "ERROR"
         assert evaluated[0]["layer_passed"] is False
+
+
+class TestWriteResultsJson:
+    def test_write_results_creates_well_formed_json(self, tmp_path):
+        ev = LayerEvaluator(task_dir=tmp_path, f2p_tests=[], p2p_tests=[])
+        evaluated = [
+            {
+                "name": "Gate",
+                "description": "",
+                "threshold": {"pass^k": 1.0},
+                "tests": [{"id": "a.sh", "status": "PASSED", "duration_ms": 10}],
+                "pass_count": 1,
+                "total_count": 1,
+                "layer_passed": True,
+            }
+        ]
+        out_path = tmp_path / "results.json"
+        ev.write_results(
+            out_path,
+            trial=1,
+            task="crm_debug",
+            model="claude-opus-4-7",
+            wall_time_s=100,
+            total_cost_usd=0.5,
+            total_tokens_in=1000,
+            total_tokens_out=200,
+            completion_signal="task_complete",
+            layers=evaluated,
+        )
+
+        data = json.loads(out_path.read_text())
+        assert data["trial"] == 1
+        assert data["task"] == "crm_debug"
+        assert data["model"] == "claude-opus-4-7"
+        assert data["completion_signal"] == "task_complete"
+        assert data["layers"] == evaluated
