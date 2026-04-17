@@ -268,6 +268,110 @@ class MultiStepRunner:
             wall_time_s=wall_time_s,
         )
 
+    def _collect_per_test_results(self, *, evaluation_result, task_context, trial_dir):
+        """Collect per-test results for layer evaluation.
+
+        Parses pytest per-test lines from evaluation_result['test_output'] and
+        executes any bash verifier scripts referenced in <task_dir>/test_layers.json.
+
+        Returns: (test_results: dict[str, str], test_durations_ms: dict[str, int],
+                  test_errors: dict[str, str])
+        """
+        import re as _re
+        import subprocess as _sp
+        import json as _json
+        import time as _time
+        from pathlib import Path as _Path
+
+        test_results: dict = {}
+        test_durations_ms: dict = {}
+        test_errors: dict = {}
+
+        # --- Source 1: Parse pytest per-test lines from evaluator stdout ---
+        output = (evaluation_result or {}).get("test_output", "") or ""
+        # Match pytest -v lines:
+        # tests/test_outputs.py::test_script_exists PASSED     [  2%]
+        # Also match node IDs with parametrization brackets and hyphens.
+        pytest_pattern = _re.compile(
+            r"^(tests/[\w/.\-]+\.py::[\w\[\]_.\-]+)\s+(PASSED|FAILED|ERROR|SKIPPED)\b",
+            _re.MULTILINE,
+        )
+        for match in pytest_pattern.finditer(output):
+            test_id = match.group(1)
+            status = match.group(2)
+            if status == "SKIPPED":
+                continue  # skip; LayerEvaluator treats missing as ERROR
+            test_results[test_id] = status
+            test_durations_ms[test_id] = 0  # per-line duration not captured
+
+        # Extract error messages for failed pytest tests (best-effort):
+        # look for FAILED lines in pytest short-summary section
+        # "FAILED tests/test_outputs.py::test_X - AssertionError: ..."
+        failed_pattern = _re.compile(
+            r"^FAILED\s+(tests/[\w/.\-]+\.py::[\w\[\]_.\-]+)\s*-?\s*(.*)$",
+            _re.MULTILINE,
+        )
+        for match in failed_pattern.finditer(output):
+            test_id = match.group(1)
+            error_text = match.group(2).strip()
+            if error_text and test_id in test_results and test_results[test_id] == "FAILED":
+                test_errors[test_id] = error_text[:500]
+
+        # --- Source 2: Execute bash verifier scripts referenced in test_layers.json ---
+        task_dir = getattr(task_context, "task_dir", None)
+        if task_dir and trial_dir:
+            test_layers_path = _Path(task_dir) / "test_layers.json"
+            if test_layers_path.exists():
+                try:
+                    doc = _json.loads(test_layers_path.read_text())
+                    all_tests = []
+                    for layer in doc.get("layers", []):
+                        all_tests.extend(layer.get("tests", []))
+
+                    for test_id in sorted(set(all_tests)):
+                        if not test_id.endswith(".sh"):
+                            continue
+                        script_path = _Path(task_dir) / test_id
+                        if not script_path.exists():
+                            test_results[test_id] = "ERROR"
+                            test_errors[test_id] = f"verifier script not found: {script_path}"
+                            continue
+                        try:
+                            t0 = _time.monotonic()
+                            result = _sp.run(
+                                ["bash", str(script_path)],
+                                cwd=str(trial_dir),
+                                capture_output=True,
+                                text=True,
+                                timeout=30,
+                            )
+                            dur_ms = int((_time.monotonic() - t0) * 1000)
+                            test_durations_ms[test_id] = dur_ms
+                            # Parse PASSED/FAILED from last non-empty stdout line
+                            last_line = ""
+                            for ln in reversed((result.stdout or "").strip().split("\n")):
+                                if ln.strip():
+                                    last_line = ln.strip()
+                                    break
+                            if last_line.startswith("PASSED"):
+                                test_results[test_id] = "PASSED"
+                            else:
+                                test_results[test_id] = "FAILED"
+                                err_detail = last_line or f"exit={result.returncode}"
+                                test_errors[test_id] = err_detail[:500]
+                        except _sp.TimeoutExpired:
+                            test_results[test_id] = "ERROR"
+                            test_errors[test_id] = "verifier timeout (30s)"
+                            test_durations_ms[test_id] = 30000
+                        except Exception as _e:
+                            test_results[test_id] = "ERROR"
+                            test_errors[test_id] = f"verifier exception: {_e}"
+                except Exception as _e:
+                    # test_layers.json parse failed; leave test_results as-is (partial)
+                    pass
+
+        return test_results, test_durations_ms, test_errors
+
     def calculate_max_memory(self, steps: list[dict[str, Any]]) -> int | None:
         """Calculate maximum memory usage across all steps."""
         try:
@@ -719,17 +823,27 @@ class MultiStepRunner:
         trial_dir = getattr(self, "_kosmos_trial_dir", None)
         if trial_dir is not None:
             try:
+                # Collect per-test results from (1) pytest stdout and (2) bash verifier scripts
+                _test_results, _test_durations, _test_errors = self._collect_per_test_results(
+                    evaluation_result=evaluation_result,
+                    task_context=task_context,
+                    trial_dir=self._kosmos_trial_dir,
+                )
+
+                # Fallback for F2P/P2P test IDs that weren't covered above (legacy aggregate verdict)
                 _f2p = list(getattr(task_context, "fail_to_pass", []) or [])
                 _p2p = list(getattr(task_context, "pass_to_pass", []) or [])
                 _passed = bool(evaluation_result.get("passed", False))
                 _status = "PASSED" if _passed else "FAILED"
-                _all_ids = _f2p + _p2p
-                _test_results = {tid: _status for tid in _all_ids}
-                _test_durations: dict[str, int] = {tid: 0 for tid in _all_ids}
-                _test_errors: dict[str, str] = {}
+                for _tid in _f2p + _p2p:
+                    if _tid not in _test_results:
+                        _test_results[_tid] = _status
+                        _test_durations.setdefault(_tid, 0)
                 if not _passed:
-                    _err = (evaluation_result.get("test_output") or "")[:500]
-                    _test_errors = {tid: _err for tid in _all_ids}
+                    _err_fallback = (evaluation_result.get("test_output") or "")[:500]
+                    for _tid in _f2p + _p2p:
+                        if _test_results.get(_tid) == "FAILED" and _tid not in _test_errors:
+                            _test_errors[_tid] = _err_fallback
 
                 # Derive completion signal from execution.status when possible.
                 _signal = "task_complete"
