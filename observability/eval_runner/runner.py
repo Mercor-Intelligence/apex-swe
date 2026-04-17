@@ -79,6 +79,162 @@ from agent.tools.update_plan import update_plan
 # Add observability to path for sibling package imports (parser, agent)
 sys.path.insert(0, str(OBSERVABILITY_DIR))
 
+# Wire common/ into sys.path for Kosmos instrumentation
+import sys as _sys
+from pathlib import Path as _Path
+_REPO_ROOT = _Path(__file__).resolve().parent.parent.parent
+if str(_REPO_ROOT) not in _sys.path:
+    _sys.path.insert(0, str(_REPO_ROOT))
+
+from common.trajectory import TrajectoryWriter  # noqa: E402
+
+
+def normalize_inspect_events_to_trajectory(events, out_path):
+    """Convert a sequence of inspect-ai event dicts into a trajectory.jsonl.
+
+    Event dicts are expected to have an 'event' type discriminator with values
+    in {'model', 'tool', 'score'}. Unknown event types are skipped. A final
+    'score' event is mapped to a completion marker.
+
+    Passes with empty events: the file is still created (empty) as a marker
+    that the trial ran.
+    """
+    writer = TrajectoryWriter(out_path)
+    try:
+        step = 0
+        for evt in events:
+            kind = evt.get("event") if isinstance(evt, dict) else None
+            ts = evt.get("timestamp", "") if isinstance(evt, dict) else ""
+            if kind == "model":
+                step += 1
+                writer.write(
+                    step=step, ts=ts, type="reasoning",
+                    content=evt.get("output_text", ""),
+                    tokens_in=int(evt.get("input_tokens", 0) or 0),
+                    tokens_out=int(evt.get("output_tokens", 0) or 0),
+                    latency_ms=int(evt.get("total_time_ms", 0) or 0),
+                    cost_usd=float(evt.get("cost_usd", 0.0) or 0.0),
+                )
+            elif kind == "tool":
+                writer.write(
+                    step=step or 1, ts=ts, type="tool_call",
+                    tool=evt.get("tool", "unknown"),
+                    args=evt.get("args", {}) if isinstance(evt.get("args"), dict) else {"raw": evt.get("args")},
+                    call_id=evt.get("call_id") or f"c_{step}",
+                )
+                out = evt.get("output", "") or ""
+                writer.write(
+                    step=step or 1, ts=ts, type="tool_result",
+                    call_id=evt.get("call_id") or f"c_{step}",
+                    status=evt.get("status", "success"),
+                    exit_code=int(evt.get("exit_code", 0) or 0),
+                    stdout_bytes=len(out.encode("utf-8")),
+                    content=out,
+                )
+            elif kind == "score":
+                signal = "task_complete" if evt.get("value") == "pass" else "error"
+                writer.write(
+                    step=step + 1, ts=ts, type="completion",
+                    signal=signal,
+                    total_tokens_in=int(evt.get("total_input_tokens", 0) or 0),
+                    total_tokens_out=int(evt.get("total_output_tokens", 0) or 0),
+                    total_cost_usd=float(evt.get("total_cost_usd", 0.0) or 0.0),
+                    wall_time_s=float(evt.get("wall_time_s", 0.0) or 0.0),
+                )
+    finally:
+        writer.close()
+
+
+def _extract_events_from_inspect_sample(sample) -> list:
+    """Best-effort extraction of normalized events from an inspect-ai sample.
+
+    Returns [] if the sample shape doesn't match our expectations — the
+    normalizer will then produce an empty trajectory.jsonl, which is a
+    signal that trial ran but events weren't captured.
+
+    Real inspect-ai event shapes (verified against installed package):
+      - ModelEvent: event="model", timestamp, output (ModelOutput with .usage.input_tokens)
+      - ToolEvent: event="tool", timestamp, function, arguments, id, result, error
+      - ScoreEvent: event="score", timestamp, score (Score with .value)
+    """
+    try:
+        raw_events = getattr(sample, "events", None) or []
+    except Exception:
+        return []
+
+    out: list[dict] = []
+    for ev in raw_events:
+        try:
+            # inspect-ai events are typed objects; try to coerce to dict shape
+            event_type = getattr(ev, "event", None) or getattr(ev, "type", None)
+            if event_type == "model":
+                # Pull token usage from ev.output.usage if available
+                model_output = getattr(ev, "output", None)
+                usage = getattr(model_output, "usage", None) if model_output is not None else None
+                input_tokens = int(getattr(usage, "input_tokens", 0) or 0) if usage is not None else 0
+                output_tokens = int(getattr(usage, "output_tokens", 0) or 0) if usage is not None else 0
+                # Try to extract textual completion from the model output
+                output_text = ""
+                try:
+                    if model_output is not None:
+                        completion = getattr(model_output, "completion", None)
+                        if completion is not None:
+                            output_text = str(completion)
+                        else:
+                            output_text = str(model_output)
+                except Exception:
+                    output_text = ""
+                out.append({
+                    "event": "model",
+                    "timestamp": str(getattr(ev, "timestamp", "") or ""),
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_time_ms": 0,  # inspect-ai may not expose this per event
+                    "cost_usd": 0.0,
+                    "output_text": output_text,
+                })
+            elif event_type == "tool":
+                err = getattr(ev, "error", None)
+                out.append({
+                    "event": "tool",
+                    "timestamp": str(getattr(ev, "timestamp", "") or ""),
+                    "tool": str(getattr(ev, "function", "") or getattr(ev, "tool", "") or "unknown"),
+                    "args": dict(getattr(ev, "arguments", {}) or {}),
+                    "call_id": str(getattr(ev, "id", "") or getattr(ev, "call_id", "") or ""),
+                    "status": "error" if err else "success",
+                    "exit_code": 0,
+                    "output": str(getattr(ev, "result", "") or getattr(ev, "output", "") or ""),
+                })
+            elif event_type in ("score", "sample_limit", "state"):
+                pass  # score is emitted below; other events skipped
+        except Exception:
+            continue
+
+    # Synthesize a completion event from sample's score if available
+    try:
+        score = getattr(sample, "scores", None)
+        value = "pass"
+        if score and isinstance(score, dict):
+            # take the first scorer result
+            first = next(iter(score.values()), None)
+            if first:
+                val = getattr(first, "value", None)
+                if val and str(val).upper() != "C":  # "C" = correct; anything else = fail
+                    value = "fail"
+        out.append({
+            "event": "score",
+            "timestamp": "",
+            "value": value,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_cost_usd": 0.0,
+            "wall_time_s": 0.0,
+        })
+    except Exception:
+        pass
+
+    return out
+
 
 def extract_scoring_from_metadata(task_id: str, run_id: str) -> Optional[dict[str, Any]]:
     """
@@ -430,7 +586,29 @@ def run_agent_sync(
                             eval_had_error = True
                             error_msg = str(sample.error)
                             break
-        
+
+        # Kosmos trajectory writing (best-effort)
+        # Writes <EVAL_OUTPUTS_DIR>/<task_id>/<run_id>/trial_<NN>/trajectory.jsonl
+        # If the inspect-ai event shape differs from our adapter, the file is
+        # still created (possibly empty) as a signal that the trial ran.
+        try:
+            from eval_runner.config import EVAL_OUTPUTS_DIR as _EVAL_OUTPUTS_DIR
+            if eval_results:
+                for result in eval_results:
+                    if hasattr(result, 'samples') and result.samples:
+                        for sample in result.samples:
+                            try:
+                                _events = _extract_events_from_inspect_sample(sample)
+                                _trial_dir = _EVAL_OUTPUTS_DIR / task_id / run_id / f"trial_{trial:02d}"
+                                _trial_dir.mkdir(parents=True, exist_ok=True)
+                                normalize_inspect_events_to_trajectory(
+                                    _events, _trial_dir / "trajectory.jsonl"
+                                )
+                            except Exception as _e:
+                                task_logger.warning(f"[kosmos] Trajectory write failed: {_e}")
+        except Exception as _e:
+            task_logger.warning(f"[kosmos] Trajectory block setup failed: {_e}")
+
         # Read agent diff from eval_outputs using run_id
         # The scorer saves to: EVAL_OUTPUTS_DIR/<task_id>/<run_id>/
         agent_diff = ""
