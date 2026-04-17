@@ -17,9 +17,10 @@ Add four capabilities (a fifth is deferred):
 
 1. **Per-run JSONL trajectory file** — one event per line, shared envelope across both sub-harnesses, capturing reasoning, tool calls, results, completion, plus cost/latency/token metadata.
 2. **Task-defined test layer groupings** — optional `test_layers.json` per task that groups existing test IDs into named layers (e.g., Gate, Context, Functional, Regression) with per-layer pass@k / pass^k thresholds. Harness has zero hardcoded knowledge of layer names.
-3. **pass@k / pass^k aggregation** — trials per `(model, task)` are aggregated into a human-readable `eval_summary.md` and machine-readable `eval_summary.json`, with per-test failure visibility.
-4. **Distractor / noise data seeding** — plausible-but-stale records (outdated files, resolved tickets, off-topic conversations) baked into existing task seed scripts.
-5. **Hint injection** — DEFERRED. Reserve `tasks/<task_id>/hints.json` filename; document placeholder only.
+3. **State-level verifiers** — layers can include bash-script verifiers that assert on trajectory content (a specific tool was called, an API was hit) and MCP service state (an email was sent, a ticket was closed, a record was updated), in addition to existing repo-state test scripts. All three verifier types share the same test-ID surface so they slot into layers uniformly.
+4. **pass@k / pass^k aggregation** — trials per `(model, task)` are aggregated into a human-readable `eval_summary.md` and machine-readable `eval_summary.json`, with per-test failure visibility and per-layer total pass counts.
+5. **Distractor / noise data seeding** — plausible-but-stale records (outdated files, resolved tickets, off-topic conversations) baked into existing task seed scripts.
+6. **Hint injection** — DEFERRED. Reserve `tasks/<task_id>/hints.json` filename; document placeholder only.
 
 ## Non-goals
 
@@ -59,17 +60,35 @@ Each sub-harness has its own venv. `common/` is added to `sys.path` from each ru
 
 ### Run output layout
 
+Existing per-turn artifacts are preserved exactly as today. Each harness has its own native turn log format; the new `trajectory.jsonl` is a normalized view written alongside, not a replacement:
+
 ```
 runs/
-└── 20260416_143022_claude-opus-4-7_crm_debug/        # experiment_id = timestamp_model_task
+└── 20260416_143022_claude-opus-4-7_crm_debug/              # experiment_id = timestamp_model_task
     ├── trial_01/
-    │   ├── trajectory.jsonl
-    │   └── results.json
+    │   ├── trajectory.jsonl                                # NEW — normalized per-turn events
+    │   ├── results.json                                    # NEW — per-layer, per-test results
+    │   │
+    │   ├── agent-logs/                                     # EXISTING — integration harness only
+    │   │   ├── episode-1/
+    │   │   │   ├── prompt.txt                              # full prompt sent to LLM this turn
+    │   │   │   ├── response.json                           # parsed LLM response (XML, tool calls)
+    │   │   │   └── debug.json                              # debug metadata
+    │   │   ├── episode-2/…
+    │   │   └── episode-N/
+    │   │
+    │   └── *.eval                                          # EXISTING — observability harness only (inspect-ai transcript)
+    │
     ├── trial_02/…
     ├── trial_N/
-    ├── eval_summary.md                               # aggregate human-readable
-    └── eval_summary.json                             # aggregate machine-readable
+    ├── eval_summary.md                                     # NEW — aggregate human-readable
+    └── eval_summary.json                                   # NEW — aggregate machine-readable
 ```
+
+**Episodes / turns are still visible** through two paths:
+
+- `trajectory.jsonl` — normalized event stream (new, cross-harness)
+- Native per-turn artifacts — `agent-logs/episode-N/` for integration, `*.eval` for observability (unchanged, existing)
 
 When `--trials 1` (single trial), `trial_01/` is still written; the aggregate `eval_summary.*` files are still produced for consistency.
 
@@ -215,6 +234,8 @@ Written by `LayerEvaluator` after tests complete. Captures per-test detail so fa
 - `pass@k` = 1 if at least one trial passed the layer, else 0
 - `pass^k` = 1 if all trials passed the layer, else 0
 - `pass_rate` = (trials where layer passed) / N
+- `tests_passed_total` = sum of `pass_count` across all N trials
+- `tests_total` = sum of `total_count` across all N trials (= N × tests-in-layer, assuming stable layer definitions)
 - Verdict: compare against the layer's declared threshold
 
 **Holistic aggregation:**
@@ -238,12 +259,14 @@ Written by `LayerEvaluator` after tests complete. Captures per-test detail so fa
 
 ## Per-Layer Results
 
-| Layer       | Threshold   | Trial 1 | Trial 2 | Trial 3 | pass@k | pass^k | Verdict |
-|-------------|-------------|---------|---------|---------|--------|--------|---------|
-| Gate        | pass^k=1.0  | PASS    | PASS    | PASS    | 1.00   | 1.00   | PASS    |
-| Context     | pass@k≥0.80 | 2/3     | 3/3     | 3/3     | 1.00   | 0.67   | PASS    |
-| Functional  | pass@k≥0.80 | 3/3     | 3/3     | 1/3     | 1.00   | 0.67   | FAIL    |
-| Regression  | pass^k=1.0  | PASS    | PASS    | FAIL    | 1.00   | 0.67   | FAIL    |
+| Layer       | Threshold   | Tests Passed (all trials) | Trial 1 | Trial 2 | Trial 3 | pass@k | pass^k | Verdict |
+|-------------|-------------|---------------------------|---------|---------|---------|--------|--------|---------|
+| Gate        | pass^k=1.0  | 6/6                       | 2/2     | 2/2     | 2/2     | 1.00   | 1.00   | PASS    |
+| Context     | pass@k≥0.80 | 8/9                       | 2/3     | 3/3     | 3/3     | 1.00   | 0.67   | PASS    |
+| Functional  | pass@k≥0.80 | 7/9                       | 3/3     | 3/3     | 1/3     | 1.00   | 0.67   | FAIL    |
+| Regression  | pass^k=1.0  | 44/45                     | 15/15   | 15/15   | 14/15   | 1.00   | 0.67   | FAIL    |
+
+The "Tests Passed (all trials)" column shows total test-case passes summed across every trial for that layer, so you can quickly see e.g. "23/30 Context tests passed across 3 trials" — useful for spotting layers where failures are scattered vs. concentrated.
 
 ## Cost & Latency
 - Total cost: $1.23
@@ -348,6 +371,15 @@ Rename includes a deprecation shim accepting old flag names for one release, wit
 - Cross-model / cross-task sweep config file
 - Trajectory visualizer
 - Cost budget kill-switch
+
+## Implementation discipline
+
+Real LLM evaluation runs are expensive and slow (single Kosmos task can cost several dollars and run for 10+ minutes per trial). Debugging harness bugs by running real LLM evaluations has an unacceptably long feedback loop. The implementation therefore commits to:
+
+- **Test-driven development** (`superpowers:test-driven-development` skill) — each new module in `common/` (`trajectory.py`, `layers.py`, `trials.py`) is specified by failing unit tests before implementation. Tests use fixtures with fake trajectory events, synthetic test results, and in-memory file writes — no real LLM calls in the unit test loop.
+- **Integration tests with mocked models** — the wire-up in `multi_step_runner.py` and `runner.py` is validated against recorded model responses and a fake tool executor, not live models.
+- **One real-model smoke test per harness** — a single known-good `(model, task)` run executed end-to-end as a final gate before declaring done. This catches "my mocks were wrong" without requiring full matrix runs.
+- **Commits after each logical chunk** — green tests + passing checks are committed before moving to the next piece, so any regression has a narrow bisect window.
 
 ## Versioning and rollback
 
