@@ -378,3 +378,39 @@ cat tasks/<task_id>/test_metadata.json
 # Check if F2P cache exists
 cat f2p_cache/<task_id>.json
 ```
+
+## Kosmos Evaluation Additions — Migration Notes
+
+This revision adds per-run JSONL trajectories, task-defined test layer groupings, pass@k/pass^k aggregation, and distractor seeding conventions. Backward-compatible with one intentional path change.
+
+### Flag renames (deprecation shim in place for one release)
+
+| Old (deprecated) | New | Sub-harness |
+|---|---|---|
+| `--n-trials` | `--trials` | integration |
+| `--max-workers` | `--workers` | integration |
+| `--parallel` | `--workers` | observability |
+
+Old flags emit `[DEPRECATED]` to stderr but still work.
+
+### Path layout change
+
+Per-trial outputs are now under `runs/<id>/trial_NN/`, even for single-trial runs. Consumers reading `runs/<id>/results.json` directly should also look for `runs/<id>/trial_01/results.json` (added alongside existing outputs — not a replacement).
+
+### Optional task-level files
+
+- `<task_dir>/test_layers.json` — group tests into evaluation layers with per-layer pass@k/pass^k thresholds. Falls back to flat F2P/P2P when absent. See `tasks/README.md` for schema.
+- `<task_dir>/hints.json` — RESERVED for future hint injection. Do not repurpose.
+
+### New outputs
+
+Every run produces (added alongside existing outputs):
+
+- `runs/<id>/trial_NN/trajectory.jsonl` — one-event-per-line JSONL of reasoning/tool_call/tool_result/completion events
+- `runs/<id>/trial_NN/results.json` — per-layer, per-test result breakdown
+- `runs/<id>/eval_summary.md` — human-readable aggregate across all trials
+- `runs/<id>/eval_summary.json` — machine-readable aggregate
+
+Existing native per-turn artifacts are preserved:
+- Integration: `agent-logs/episode-N/{prompt.txt,response.json,debug.json}`
+- Observability: `*.eval` inspect-ai transcripts

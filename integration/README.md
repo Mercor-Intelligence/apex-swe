@@ -80,35 +80,37 @@ apx list-models
 
 ## Supported Models
 
-| Short Name (use with `--models`) | Provider |
-|---------------------------------|----------|
-| `claude-opus-4-6` | Anthropic |
-| `claude-opus-4-5-20251101` | Anthropic |
-| `claude-opus-4-1-20250805` | Anthropic |
-| `claude-opus-4-20250514` | Anthropic |
-| `claude-sonnet-4-5-20250929` | Anthropic |
-| `claude-sonnet-4-20250514` | Anthropic |
-| `claude-sonnet-4-6` | Anthropic |
-| `gpt-4o` | OpenAI |
-| `gpt-5` | OpenAI |
-| `gpt-5-codex` | OpenAI |
-| `gpt-5.1-codex` | OpenAI |
-| `gpt-5.2` / `gpt-5.2-codex` | OpenAI |
-| `gpt-5.3` / `gpt-5.3-codex` | OpenAI |
-| `gpt-5.4` | OpenAI |
-| `gemini/gemini-2.5-pro` | Google |
-| `gemini/gemini-2.5-flash` | Google |
-| `gemini/gemini-3-pro-preview` | Google |
-| `gemini/gemini-3.1-pro-preview` | Google |
-| `gemini/gemini-3.1-flash` | Google |
-| `xai/grok-4` | xAI |
-| `xai/grok-4.1` | xAI |
-| `xai/grok-code-fast-1` | xAI |
-| `meta_llama/Llama-4-Maverick-17B-128E-Instruct-FP8` | Meta |
-| `fireworks_ai/.../qwen3-coder-480b-a35b-instruct` | Fireworks |
-| `fireworks_ai/.../deepseek-v3p2` | Fireworks |
-| `fireworks_ai/.../kimi-k2-thinking` | Fireworks |
-| `fireworks_ai/.../kimi-k2p5` | Fireworks |
+
+| Short Name (use with `--models`)                    | Provider  |
+| --------------------------------------------------- | --------- |
+| `claude-opus-4-6`                                   | Anthropic |
+| `claude-opus-4-5-20251101`                          | Anthropic |
+| `claude-opus-4-1-20250805`                          | Anthropic |
+| `claude-opus-4-20250514`                            | Anthropic |
+| `claude-sonnet-4-5-20250929`                        | Anthropic |
+| `claude-sonnet-4-20250514`                          | Anthropic |
+| `claude-sonnet-4-6`                                 | Anthropic |
+| `gpt-4o`                                            | OpenAI    |
+| `gpt-5`                                             | OpenAI    |
+| `gpt-5-codex`                                       | OpenAI    |
+| `gpt-5.1-codex`                                     | OpenAI    |
+| `gpt-5.2` / `gpt-5.2-codex`                         | OpenAI    |
+| `gpt-5.3` / `gpt-5.3-codex`                         | OpenAI    |
+| `gpt-5.4`                                           | OpenAI    |
+| `gemini/gemini-2.5-pro`                             | Google    |
+| `gemini/gemini-2.5-flash`                           | Google    |
+| `gemini/gemini-3-pro-preview`                       | Google    |
+| `gemini/gemini-3.1-pro-preview`                     | Google    |
+| `gemini/gemini-3.1-flash`                           | Google    |
+| `xai/grok-4`                                        | xAI       |
+| `xai/grok-4.1`                                      | xAI       |
+| `xai/grok-code-fast-1`                              | xAI       |
+| `meta_llama/Llama-4-Maverick-17B-128E-Instruct-FP8` | Meta      |
+| `fireworks_ai/.../qwen3-coder-480b-a35b-instruct`   | Fireworks |
+| `fireworks_ai/.../deepseek-v3p2`                    | Fireworks |
+| `fireworks_ai/.../kimi-k2-thinking`                 | Fireworks |
+| `fireworks_ai/.../kimi-k2p5`                        | Fireworks |
+
 
 ---
 
@@ -129,23 +131,26 @@ export LLAMA_API_KEY='...'                # For Llama models
 
 ### CLI Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--tasks, -t` | Task ID to run | (required) |
-| `--models, -m` | Model to use | `claude-sonnet-4-20250514` |
-| `--n-trials, -n` | Number of trials to run | `3` |
-| `--timeout` | Timeout per trial in seconds | `900` |
-| `--max-workers, -w` | Max parallel trials | `4` |
-| `--max-steps` | Maximum steps per trial | — |
-| `--reasoning-effort` | Reasoning effort (`low`, `medium`, `high`) | Auto per model |
-| `--runs-dir, -r` | Results directory | `runs` |
-| `--tasks-dir, -d` | Tasks directory | `tasks` |
+
+| Option               | Description                                | Default                    |
+| -------------------- | ------------------------------------------ | -------------------------- |
+| `--tasks, -t`        | Task ID to run                             | (required)                 |
+| `--models, -m`       | Model to use                               | `claude-sonnet-4-20250514` |
+| `--n-trials, -n`     | Number of trials to run                    | `3`                        |
+| `--timeout`          | Timeout per trial in seconds               | `900`                      |
+| `--max-workers, -w`  | Max parallel trials                        | `4`                        |
+| `--max-steps`        | Maximum steps per trial                    | —                          |
+| `--reasoning-effort` | Reasoning effort (`low`, `medium`, `high`) | Auto per model             |
+| `--runs-dir, -r`     | Results directory                          | `runs`                     |
+| `--tasks-dir, -d`    | Tasks directory                            | `tasks`                    |
+
 
 **Note:** Each run executes a single task with a single model. The `--max-workers` option controls how many trials run in parallel (e.g., with `--n-trials 3 --max-workers 4`, all 3 trials run simultaneously).
 
 ### MCP (Model Context Protocol) Integration
 
 The harness automatically integrates with MCP servers for specific services. Supported services include:
+
 - Zammad
 - Mattermost
 - Plane API
@@ -227,18 +232,21 @@ runs/experiment_my-experiment/
 ## Troubleshooting
 
 ### Docker Not Running
+
 ```bash
 docker ps
 sudo systemctl start docker  # if needed
 ```
 
 ### API Key Issues
+
 ```bash
 echo $ANTHROPIC_API_KEY
 python3 -c "import litellm; print(litellm.completion(model='claude-sonnet-4-20250514', messages=[{'role': 'user', 'content': 'test'}]))"
 ```
 
 ### Missing Tasks
+
 ```bash
 # Verify your tasks directory has the expected structure
 ls -la <path-to-task>/
@@ -248,3 +256,40 @@ ls -la <path-to-task>/
 # - Dockerfile (optional)
 # - docker-compose.yaml (optional)
 ```
+
+## Kosmos Evaluation Additions — Migration Notes
+
+This revision adds per-run JSONL trajectories, task-defined test layer groupings, pass@k/pass^k aggregation, and distractor seeding conventions. Backward-compatible with one intentional path change.
+
+### Flag renames (deprecation shim in place for one release)
+
+| Old (deprecated) | New | Sub-harness |
+|---|---|---|
+| `--n-trials` | `--trials` | integration |
+| `--max-workers` | `--workers` | integration |
+| `--parallel` | `--workers` | observability |
+
+Old flags emit `[DEPRECATED]` to stderr but still work.
+
+### Path layout change
+
+Per-trial outputs are now under `runs/<id>/trial_NN/`, even for single-trial runs. Consumers reading `runs/<id>/results.json` directly should also look for `runs/<id>/trial_01/results.json` (added alongside existing outputs — not a replacement).
+
+### Optional task-level files
+
+- `<task_dir>/test_layers.json` — group tests into evaluation layers with per-layer pass@k/pass^k thresholds. Falls back to flat F2P/P2P when absent. See `tasks/README.md` for schema.
+- `<task_dir>/hints.json` — RESERVED for future hint injection. Do not repurpose.
+
+### New outputs
+
+Every run produces (added alongside existing outputs):
+
+- `runs/<id>/trial_NN/trajectory.jsonl` — one-event-per-line JSONL of reasoning/tool_call/tool_result/completion events
+- `runs/<id>/trial_NN/results.json` — per-layer, per-test result breakdown
+- `runs/<id>/eval_summary.md` — human-readable aggregate across all trials
+- `runs/<id>/eval_summary.json` — machine-readable aggregate
+
+Existing native per-turn artifacts are preserved:
+- Integration: `agent-logs/episode-N/{prompt.txt,response.json,debug.json}`
+- Observability: `*.eval` inspect-ai transcripts
+
