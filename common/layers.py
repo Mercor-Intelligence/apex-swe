@@ -76,3 +76,45 @@ class LayerEvaluator:
                 threshold={"pass^k": 1.0},
             ),
         ]
+
+    def evaluate(
+        self,
+        layers: Sequence[Layer],
+        results: dict[str, str],
+        durations_ms: dict[str, int],
+        errors: dict[str, str],
+    ) -> list[dict]:
+        """Produce per-layer result records.
+
+        results: test_id -> "PASSED" | "FAILED" | "ERROR" (missing keys treated as ERROR)
+        durations_ms: test_id -> duration (missing keys default to 0)
+        errors: test_id -> error text for non-PASSED tests
+        """
+        output: list[dict] = []
+        for layer in layers:
+            test_records: list[dict] = []
+            pass_count = 0
+            for test_id in layer.tests:
+                status = results.get(test_id, "ERROR")
+                record = {
+                    "id": test_id,
+                    "status": status,
+                    "duration_ms": durations_ms.get(test_id, 0),
+                }
+                if status != "PASSED" and test_id in errors:
+                    record["error"] = errors[test_id]
+                if status != "PASSED" and "error" not in record and status == "ERROR":
+                    record["error"] = "no result recorded for this test"
+                if status == "PASSED":
+                    pass_count += 1
+                test_records.append(record)
+            output.append({
+                "name": layer.name,
+                "description": layer.description,
+                "threshold": layer.threshold,
+                "tests": test_records,
+                "pass_count": pass_count,
+                "total_count": len(layer.tests),
+                "layer_passed": pass_count == len(layer.tests),
+            })
+        return output

@@ -74,3 +74,51 @@ class TestLayerDataclass:
         assert layer.description == "basic"
         assert layer.tests == ["a.sh", "b.sh"]
         assert layer.threshold == {"pass^k": 1.0}
+
+
+class TestEvaluate:
+    def _make(self, tmp_path):
+        return LayerEvaluator(task_dir=tmp_path, f2p_tests=[], p2p_tests=[])
+
+    def test_evaluate_returns_layer_passed_true_when_all_tests_pass(self, tmp_path):
+        ev = self._make(tmp_path)
+        layers = [Layer(name="L", tests=["t1", "t2"], threshold={"pass^k": 1.0})]
+        results = {"t1": "PASSED", "t2": "PASSED"}
+        evaluated = ev.evaluate(layers, results, durations_ms={"t1": 10, "t2": 20}, errors={})
+        assert evaluated[0]["layer_passed"] is True
+        assert evaluated[0]["pass_count"] == 2
+        assert evaluated[0]["total_count"] == 2
+
+    def test_evaluate_returns_layer_passed_false_when_any_test_fails(self, tmp_path):
+        ev = self._make(tmp_path)
+        layers = [Layer(name="L", tests=["t1", "t2"], threshold={"pass^k": 1.0})]
+        results = {"t1": "PASSED", "t2": "FAILED"}
+        evaluated = ev.evaluate(
+            layers, results, durations_ms={"t1": 10, "t2": 20},
+            errors={"t2": "AssertionError: nope"},
+        )
+        assert evaluated[0]["layer_passed"] is False
+        assert evaluated[0]["pass_count"] == 1
+
+    def test_evaluate_records_per_test_status_duration_and_error(self, tmp_path):
+        ev = self._make(tmp_path)
+        layers = [Layer(name="L", tests=["t1"], threshold={"pass^k": 1.0})]
+        evaluated = ev.evaluate(
+            layers, {"t1": "FAILED"}, durations_ms={"t1": 42},
+            errors={"t1": "boom"},
+        )
+        test = evaluated[0]["tests"][0]
+        assert test == {"id": "t1", "status": "FAILED", "duration_ms": 42, "error": "boom"}
+
+    def test_evaluate_omits_error_field_when_test_passed(self, tmp_path):
+        ev = self._make(tmp_path)
+        layers = [Layer(name="L", tests=["t1"], threshold={"pass^k": 1.0})]
+        evaluated = ev.evaluate(layers, {"t1": "PASSED"}, durations_ms={"t1": 5}, errors={})
+        assert "error" not in evaluated[0]["tests"][0]
+
+    def test_evaluate_missing_result_marks_test_as_error(self, tmp_path):
+        ev = self._make(tmp_path)
+        layers = [Layer(name="L", tests=["t_missing"], threshold={"pass^k": 1.0})]
+        evaluated = ev.evaluate(layers, {}, durations_ms={}, errors={})
+        assert evaluated[0]["tests"][0]["status"] == "ERROR"
+        assert evaluated[0]["layer_passed"] is False
