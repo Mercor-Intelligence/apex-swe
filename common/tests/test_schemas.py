@@ -73,8 +73,13 @@ class TestValidateEvent:
         with pytest.raises(schemas.SchemaError, match="bogus"):
             schemas.validate_event(event)
 
-    def test_type_specific_missing_field_raises(self):
-        event = {"step": 1, "ts": "x", "type": "tool_call", "tool": "bash"}  # missing args, call_id
+    def test_missing_args_raises_with_specific_message(self):
+        event = {"step": 1, "ts": "x", "type": "tool_call", "tool": "bash", "call_id": "c_01"}
+        with pytest.raises(schemas.SchemaError, match="args"):
+            schemas.validate_event(event)
+
+    def test_missing_call_id_raises_with_specific_message(self):
+        event = {"step": 1, "ts": "x", "type": "tool_call", "tool": "bash", "args": {}}
         with pytest.raises(schemas.SchemaError, match="call_id"):
             schemas.validate_event(event)
 

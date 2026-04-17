@@ -8,7 +8,7 @@ _ENVELOPE_FIELDS = ("step", "ts", "type")
 
 _TYPE_REQUIRED_FIELDS = {
     "reasoning": ("content", "tokens_in", "tokens_out", "latency_ms", "cost_usd"),
-    "tool_call": ("tool", "call_id", "args"),
+    "tool_call": ("tool", "args", "call_id"),
     "tool_result": ("call_id", "status", "exit_code", "stdout_bytes", "content"),
     "completion": ("signal", "total_tokens_in", "total_tokens_out", "total_cost_usd", "wall_time_s"),
 }
