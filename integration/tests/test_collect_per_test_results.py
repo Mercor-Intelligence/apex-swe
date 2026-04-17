@@ -89,3 +89,41 @@ def test_executes_bash_verifier_scripts(tmp_path):
     assert results["tests/verifiers/fail.sh"] == "FAILED"
     assert "FAILED: no trajectory" in errors.get("tests/verifiers/fail.sh", "")
     assert durations["tests/verifiers/pass.sh"] >= 0
+
+
+def test_parses_pytest_short_summary_format(tmp_path, monkeypatch):
+    """Test parsing of pytest -rA short summary output format (no 'tests/' prefix)."""
+    from src.harness.multi_step_runner import MultiStepRunner
+
+    runner = MultiStepRunner.__new__(MultiStepRunner)
+
+    # Simulate pytest output from a run in /tests directory (no tests/ prefix)
+    evaluation_result = {
+        "test_output": (
+            "==================================== PASSES ====================================\n"
+            "=========================== short test summary info ============================\n"
+            "PASSED test_outputs.py::test_script_exists\n"
+            "PASSED test_outputs.py::test_duplicates_removed\n"
+            "FAILED test_outputs.py::test_active_customer_count - AssertionError: Expected exactly 50 customers, found 83\n"
+            "FAILED test_outputs.py::test_s3_report_bucket_and_key - AssertionError: key not found\n"
+            "======================== 2 failed, 2 passed in 1.51s =========================\n"
+        ),
+        "passed": False,
+    }
+
+    task_context = MagicMock()
+    task_context.task_dir = str(tmp_path)
+
+    results, durations, errors = runner._collect_per_test_results(
+        evaluation_result=evaluation_result,
+        task_context=task_context,
+        trial_dir=None,
+    )
+
+    # Both prefixed and non-prefixed forms should resolve
+    assert results["test_outputs.py::test_script_exists"] == "PASSED"
+    assert results["tests/test_outputs.py::test_script_exists"] == "PASSED"
+    assert results["test_outputs.py::test_active_customer_count"] == "FAILED"
+    assert results["tests/test_outputs.py::test_active_customer_count"] == "FAILED"
+    assert "Expected exactly 50 customers" in errors.get("test_outputs.py::test_active_customer_count", "")
+    assert "Expected exactly 50 customers" in errors.get("tests/test_outputs.py::test_active_customer_count", "")

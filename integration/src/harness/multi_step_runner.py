@@ -44,6 +44,22 @@ def _ts_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+def _dedupe_prefix_forms(test_id: str) -> list:
+    """Return both the prefixed and non-prefixed forms of a test ID.
+
+    Pytest's test ID format varies depending on where pytest is invoked from
+    and the -v/-rA flags used. Some outputs prefix with "tests/", others don't.
+    This helper returns both forms so downstream lookups succeed regardless of
+    which form test_layers.json uses.
+    """
+    forms = {test_id}
+    if test_id.startswith("tests/"):
+        forms.add(test_id[len("tests/"):])
+    else:
+        forms.add("tests/" + test_id)
+    return list(forms)
+
+
 def _ensure_git_baseline(
     docker_manager, repo_path: str = "/app", log: TaskLogger | None = None
 ) -> bool:
@@ -289,33 +305,42 @@ class MultiStepRunner:
 
         # --- Source 1: Parse pytest per-test lines from evaluator stdout ---
         output = (evaluation_result or {}).get("test_output", "") or ""
-        # Match pytest -v lines:
-        # tests/test_outputs.py::test_script_exists PASSED     [  2%]
-        # Also match node IDs with parametrization brackets and hyphens.
-        pytest_pattern = _re.compile(
-            r"^(tests/[\w/.\-]+\.py::[\w\[\]_.\-]+)\s+(PASSED|FAILED|ERROR|SKIPPED)\b",
+
+        # pytest -rA output includes both:
+        #   "PASSED test_outputs.py::test_script_exists"
+        #   "FAILED test_outputs.py::test_name - error message"
+        # Test file prefix may or may not include "tests/" depending on how pytest is invoked.
+        summary_pattern = _re.compile(
+            r"^(PASSED|FAILED|ERROR)\s+((?:tests/)?[\w/.\-]+\.py::[\w\[\]_.\-]+)\s*-?\s*(.*)$",
             _re.MULTILINE,
         )
-        for match in pytest_pattern.finditer(output):
+        for match in summary_pattern.finditer(output):
+            status = match.group(1)
+            test_id = match.group(2)
+            err_text = match.group(3).strip()
+            # Store under both forms (with and without tests/ prefix) for robust lookup
+            for form in _dedupe_prefix_forms(test_id):
+                test_results[form] = status
+                test_durations_ms.setdefault(form, 0)
+                if status != "PASSED" and err_text:
+                    test_errors[form] = err_text[:500]
+
+        # Also handle the verbose per-line format (in case pytest -v is used):
+        #   "tests/test_outputs.py::test_script_exists PASSED   [  2%]"
+        verbose_pattern = _re.compile(
+            r"^((?:tests/)?[\w/.\-]+\.py::[\w\[\]_.\-]+)\s+(PASSED|FAILED|ERROR|SKIPPED)\b",
+            _re.MULTILINE,
+        )
+        for match in verbose_pattern.finditer(output):
             test_id = match.group(1)
             status = match.group(2)
             if status == "SKIPPED":
-                continue  # skip; LayerEvaluator treats missing as ERROR
-            test_results[test_id] = status
-            test_durations_ms[test_id] = 0  # per-line duration not captured
-
-        # Extract error messages for failed pytest tests (best-effort):
-        # look for FAILED lines in pytest short-summary section
-        # "FAILED tests/test_outputs.py::test_X - AssertionError: ..."
-        failed_pattern = _re.compile(
-            r"^FAILED\s+(tests/[\w/.\-]+\.py::[\w\[\]_.\-]+)\s*-?\s*(.*)$",
-            _re.MULTILINE,
-        )
-        for match in failed_pattern.finditer(output):
-            test_id = match.group(1)
-            error_text = match.group(2).strip()
-            if error_text and test_id in test_results and test_results[test_id] == "FAILED":
-                test_errors[test_id] = error_text[:500]
+                continue
+            for form in _dedupe_prefix_forms(test_id):
+                # Don't overwrite an existing status from summary pattern
+                if form not in test_results:
+                    test_results[form] = status
+                    test_durations_ms.setdefault(form, 0)
 
         # --- Source 2: Execute bash verifier scripts referenced in test_layers.json ---
         task_dir = getattr(task_context, "task_dir", None)
