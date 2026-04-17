@@ -46,9 +46,9 @@ def run_experiment(
         "-m",
         help="Comma-separated list of models"
     ),
-    n_trials: int = typer.Option(3, "--n-trials", "-n", help="Number of trials per task-model"),
+    trials: int = typer.Option(3, "--trials", "-n", "--n-trials", help="Number of trials per task-model (formerly --n-trials)"),
     timeout: int = typer.Option(900, "--timeout", help="Timeout per trial in seconds"),
-    max_workers: int = typer.Option(4, "--max-workers", "-w", help="Maximum parallel workers"),
+    workers: int = typer.Option(4, "--workers", "-w", "--max-workers", help="Maximum parallel workers (formerly --max-workers)"),
     max_steps: Optional[int] = typer.Option(None, "--max-steps", help="Maximum steps per trial"),
     todo_tool_enabled: bool = typer.Option(False, "--todo-tool-enabled", help="Enable todo tool"),
     reasoning_effort: Optional[str] = typer.Option(None, "--reasoning-effort", help="Reasoning effort: low, medium, high (auto-detected for supported models)"),
@@ -56,7 +56,15 @@ def run_experiment(
     tasks_dir: Path = typer.Option(Path("tasks"), "--tasks-dir", "-d", help="Tasks directory"),
 ):
     """Run parallel experiments across multiple tasks and models."""
-    
+
+    import sys as _sys
+    if any(a == "--n-trials" or a.startswith("--n-trials=") for a in _sys.argv):
+        print("[DEPRECATED] --n-trials will be removed in a future release; "
+              "use --trials instead.", file=_sys.stderr)
+    if any(a == "--max-workers" or a.startswith("--max-workers=") for a in _sys.argv):
+        print("[DEPRECATED] --max-workers will be removed in a future release; "
+              "use --workers instead.", file=_sys.stderr)
+
     task_list = [t.strip() for t in tasks.split(",")]
     model_list = [m.strip() for m in models.split(",")]
     
@@ -76,13 +84,13 @@ def run_experiment(
         table.add_row(
             task,
             ", ".join(model_list),
-            str(n_trials),
-            str(len(model_list) * n_trials),
+            str(trials),
+            str(len(model_list) * trials),
         )
     
     console.print(table)
-    console.print(f"\n[bold]Total runs to execute:[/bold] {len(task_list) * len(model_list) * n_trials}")
-    console.print(f"[bold]Max parallel workers:[/bold] {max_workers}")
+    console.print(f"\n[bold]Total runs to execute:[/bold] {len(task_list) * len(model_list) * trials}")
+    console.print(f"[bold]Max parallel workers:[/bold] {workers}")
     console.print(f"[bold]Timeout per trial:[/bold] {timeout}s\n")
     
     try:
@@ -92,14 +100,14 @@ def run_experiment(
             "experiment_id": experiment_id,
             "tasks": task_list,
             "models": model_list,
-            "n_trials": n_trials,
+            "n_trials": trials,
             "timeout": timeout,
             "created_at": datetime.now().isoformat(),
         }
         with open(experiment_dir / "metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
 
-        executor = EvaluationExecutor(max_workers=max_workers)
+        executor = EvaluationExecutor(max_workers=workers)
         all_trials = []
         all_results = {}
 
@@ -125,7 +133,7 @@ def run_experiment(
                     max_steps=max_steps,
                     todo_tool_enabled=todo_tool_enabled,
                     reasoning_effort=reasoning_effort,
-                    max_trials=n_trials,
+                    max_trials=trials,
                 )
 
                 result = executor.execute_run(config)
