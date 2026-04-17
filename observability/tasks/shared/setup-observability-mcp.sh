@@ -321,41 +321,49 @@ ensure_mattermost_data() {
     
     local uploaded=0
     local batch_count=0
-    
+    local curl_pids=()
+
     while IFS= read -r msg; do
         local content
         content=$(echo "$msg" | jq -r '(if .content | type == "object" then .content.body else null end) // .content // .message // empty | if type == "string" then . else empty end' 2>/dev/null | head -c 4000)
-        
+
         if [ -n "$content" ] && [ "$content" != "null" ] && [ ${#content} -gt 5 ]; then
             # Escape for JSON
             local escaped_content
             escaped_content=$(echo "$content" | jq -Rs . 2>/dev/null)
-            
+
             # Upload in batches of 10 parallel requests
-            curl -s -X POST "http://mattermost:8065/api/v4/posts" \
+            curl -s -m 10 -X POST "http://mattermost:8065/api/v4/posts" \
                 -H "Authorization: Bearer $api_token" \
                 -H "Content-Type: application/json" \
                 -d "{\"channel_id\":\"$channel_id\",\"message\":$escaped_content}" \
                 >/dev/null 2>&1 &
-            
+            curl_pids+=($!)
+
             uploaded=$((uploaded + 1))
             batch_count=$((batch_count + 1))
-            
+
             # Wait every 10 messages (allows Mattermost to process and index)
+            # Use explicit PIDs to avoid waiting on tee process substitution
             if [ $batch_count -ge 10 ]; then
-                wait
+                for pid in "${curl_pids[@]}"; do
+                    wait "$pid" 2>/dev/null
+                done
+                curl_pids=()
                 batch_count=0
             fi
-            
+
             # Progress report every 100 messages
             if [ $((uploaded % 100)) -eq 0 ]; then
                 echo "   Uploaded $uploaded messages..."
             fi
         fi
     done < /tmp/sampled_msgs.json
-    
-    # Wait for all remaining uploads to complete
-    wait
+
+    # Wait for all remaining uploads to complete (explicit PIDs)
+    for pid in "${curl_pids[@]}"; do
+        wait "$pid" 2>/dev/null
+    done
     rm -f /tmp/sampled_msgs.json
     
     # Wait for Mattermost to index the messages

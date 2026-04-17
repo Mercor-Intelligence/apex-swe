@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/build
+**/.git
+**/.DS_Store
+**/.env
+**/.env.local
+**/coverage
+**/.nyc_output
+**/.cache
+**/*.tsbuildinfo

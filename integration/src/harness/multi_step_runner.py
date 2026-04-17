@@ -310,14 +310,18 @@ class MultiStepRunner:
         #   "PASSED test_outputs.py::test_script_exists"
         #   "FAILED test_outputs.py::test_name - error message"
         # Test file prefix may or may not include "tests/" depending on how pytest is invoked.
+        # Use a non-zero-width trailing group to avoid finditer skipping alternate
+        # lines. The optional "- <err>" part requires a literal separator; without
+        # it the regex would match empty string and finditer advances by one
+        # character past the newline on each zero-width match, skipping the next line.
         summary_pattern = _re.compile(
-            r"^(PASSED|FAILED|ERROR)\s+((?:tests/)?[\w/.\-]+\.py::[\w\[\]_.\-]+)\s*-?\s*(.*)$",
+            r"^(PASSED|FAILED|ERROR)\s+((?:tests/)?[\w/.\-]+\.py::[\w\[\]_.\-]+)(?:\s+-\s+(.+))?$",
             _re.MULTILINE,
         )
         for match in summary_pattern.finditer(output):
             status = match.group(1)
             test_id = match.group(2)
-            err_text = match.group(3).strip()
+            err_text = (match.group(3) or "").strip()
             # Store under both forms (with and without tests/ prefix) for robust lookup
             for form in _dedupe_prefix_forms(test_id):
                 test_results[form] = status

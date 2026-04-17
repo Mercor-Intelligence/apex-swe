@@ -1,7 +1,0 @@
-{
-  "version": 1,
-  "layers": [
-    { "name": "Functional", "tests": ["@F2P"], "threshold": { "pass^k": 1.0 } },
-    { "name": "Regression", "tests": ["@P2P"], "threshold": { "pass^k": 1.0 } }
-  ]
-}
