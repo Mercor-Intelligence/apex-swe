@@ -3,7 +3,7 @@ import json
 import shutil
 from pathlib import Path
 
-from common.trials import aggregate_trials
+from common.trials import aggregate_trials, write_eval_summary
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -94,3 +94,64 @@ class TestAggregateTrials:
         import pytest
         with pytest.raises(ValueError, match="no trial_"):
             aggregate_trials(tmp_path)
+
+
+from common.trials import write_eval_summary
+
+
+class TestWriteEvalSummary:
+    def test_writes_markdown_and_json(self, tmp_path):
+        _populate_run_dir(tmp_path, [
+            "sample_results_trial_01.json",
+            "sample_results_trial_02.json",
+            "sample_results_trial_03.json",
+        ])
+        agg = aggregate_trials(tmp_path)
+        write_eval_summary(tmp_path, agg)
+
+        md_path = tmp_path / "eval_summary.md"
+        json_path = tmp_path / "eval_summary.json"
+        assert md_path.exists()
+        assert json_path.exists()
+
+    def test_markdown_contains_per_layer_verdicts(self, tmp_path):
+        _populate_run_dir(tmp_path, [
+            "sample_results_trial_01.json",
+            "sample_results_trial_02.json",
+            "sample_results_trial_03.json",
+        ])
+        agg = aggregate_trials(tmp_path)
+        write_eval_summary(tmp_path, agg)
+        content = (tmp_path / "eval_summary.md").read_text()
+
+        assert "# Eval Summary" in content
+        assert "crm_debug" in content
+        assert "claude-opus-4-7" in content
+        assert "Gate" in content
+        assert "Functional" in content
+        assert "5/6" in content  # Functional tests_passed_total / tests_total
+        assert "PASS" in content
+        assert "FAIL" in content
+
+    def test_markdown_contains_failed_tests_section(self, tmp_path):
+        _populate_run_dir(tmp_path, [
+            "sample_results_trial_01.json",
+            "sample_results_trial_02.json",
+            "sample_results_trial_03.json",
+        ])
+        agg = aggregate_trials(tmp_path)
+        write_eval_summary(tmp_path, agg)
+        content = (tmp_path / "eval_summary.md").read_text()
+        assert "## Failed Tests" in content
+        assert "Trial 3" in content
+        assert "t2" in content
+        assert "boom" in content
+
+    def test_json_matches_aggregate_shape(self, tmp_path):
+        _populate_run_dir(tmp_path, ["sample_results_trial_01.json"])
+        agg = aggregate_trials(tmp_path)
+        write_eval_summary(tmp_path, agg)
+        loaded = json.loads((tmp_path / "eval_summary.json").read_text())
+        assert loaded["task"] == agg["task"]
+        assert loaded["trial_count"] == agg["trial_count"]
+        assert len(loaded["layers"]) == len(agg["layers"])

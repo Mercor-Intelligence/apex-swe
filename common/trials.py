@@ -83,3 +83,86 @@ def _verdict(threshold: dict, pass_at_k: float, pass_power_k: float, pass_rate: 
     if "pass@k" in threshold:
         return "PASS" if pass_rate >= threshold["pass@k"] else "FAIL"
     raise ValueError(f"unknown threshold: {threshold}")
+
+
+def write_eval_summary(run_dir: Path | str, agg: dict) -> None:
+    run_dir = Path(run_dir)
+    (run_dir / "eval_summary.json").write_text(json.dumps(agg, indent=2) + "\n")
+    (run_dir / "eval_summary.md").write_text(_render_markdown(agg))
+
+
+def _render_markdown(agg: dict) -> str:
+    k = agg["trial_count"]
+    lines: list[str] = []
+    lines.append(f"# Eval Summary — {agg['task']}")
+    lines.append("")
+    lines.append(f"**Model:** {agg['model']}")
+    lines.append(f"**Trials:** {k}")
+    lines.append("")
+    lines.append("## Overall")
+    lines.append(f"- pass@{k}: {_verdict_text(agg['holistic']['pass_at_k'])}")
+    lines.append(f"- pass^{k}: {_verdict_text(agg['holistic']['pass_power_k'])}")
+    lines.append("")
+
+    lines.append("## Per-Layer Results")
+    lines.append("")
+    header = (
+        "| Layer | Threshold | Tests Passed (all trials) | "
+        + " | ".join(f"Trial {i}" for i in range(1, k + 1))
+        + f" | pass@k | pass^k | Verdict |"
+    )
+    sep = "|" + "|".join("---" for _ in range(4 + k + 2)) + "|"
+    lines.append(header)
+    lines.append(sep)
+    for layer in agg["layers"]:
+        tests_total_col = f"{layer['tests_passed_total']}/{layer['tests_total']}"
+        trial_cells = []
+        for pt in layer["per_trial"]:
+            trial_cells.append(f"{pt['pass_count']}/{pt['total_count']}")
+        threshold_text = _threshold_text(layer["threshold"])
+        row = (
+            f"| {layer['name']} | {threshold_text} | {tests_total_col} | "
+            + " | ".join(trial_cells)
+            + f" | {layer['pass_at_k']:.2f} | {layer['pass_power_k']:.2f} | {layer['verdict']} |"
+        )
+        lines.append(row)
+    lines.append("")
+
+    lines.append("## Cost & Latency")
+    lines.append(f"- Total cost: ${agg['total_cost_usd']:.2f}")
+    lines.append(f"- Avg cost per trial: ${agg['total_cost_usd']/k:.2f}")
+    lines.append(f"- Avg wall time per trial: {agg['avg_wall_time_s']:.0f}s")
+    lines.append("")
+
+    lines.append("## Failed Tests")
+    any_failed = False
+    for trial in agg["trials"]:
+        failures = []
+        for layer in trial["layers"]:
+            for t in layer["tests"]:
+                if t["status"] != "PASSED":
+                    err = t.get("error", "")
+                    failures.append(f"- `{t['id']}` ({layer['name']}) — {err}")
+        if failures:
+            any_failed = True
+            lines.append("")
+            lines.append(f"### Trial {trial['trial']}")
+            lines.extend(failures)
+    if not any_failed:
+        lines.append("")
+        lines.append("_No failed tests across all trials._")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def _verdict_text(value: float) -> str:
+    return "PASS" if value == 1.0 else "FAIL"
+
+
+def _threshold_text(threshold: dict) -> str:
+    if "pass^k" in threshold:
+        return f"pass^k={threshold['pass^k']}"
+    if "pass@k" in threshold:
+        return f"pass@k≥{threshold['pass@k']}"
+    return str(threshold)
