@@ -104,6 +104,23 @@ class TaskContext(BaseModel):
         description="Process verification checks from task.yaml — defines which services "
         "the agent must interact with during execution",
     )
+    run_dir: Path | None = Field(
+        None,
+        description="Run output directory ({runs_dir}/{run_id}). Used by MultiStepRunner "
+        "to place per-trial Kosmos artifacts (trajectory.jsonl, results.json).",
+    )
+    model: str | None = Field(
+        None,
+        description="Model name string (for recording into trial results.json).",
+    )
+    fail_to_pass: list[str] = Field(
+        default_factory=list,
+        description="FAIL_TO_PASS test IDs from test_metadata.json (for layer evaluation).",
+    )
+    pass_to_pass: list[str] = Field(
+        default_factory=list,
+        description="PASS_TO_PASS test IDs from test_metadata.json (for layer evaluation).",
+    )
 
     class Config:
         arbitrary_types_allowed = True

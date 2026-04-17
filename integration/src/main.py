@@ -138,6 +138,28 @@ def run_experiment(
 
                 result = executor.execute_run(config)
 
+                # Kosmos post-dispatch aggregation: build eval_summary.{md,json}
+                # from the per-trial results.json files dropped by MultiStepRunner.
+                try:
+                    import sys as _sys
+                    from pathlib import Path as _Path
+                    _REPO = _Path(__file__).resolve().parent.parent.parent
+                    if str(_REPO) not in _sys.path:
+                        _sys.path.insert(0, str(_REPO))
+                    from common.trials import aggregate_trials, write_eval_summary
+
+                    _run_dir = runs_dir / run_id
+                    try:
+                        _agg = aggregate_trials(_run_dir)
+                        write_eval_summary(_run_dir, _agg)
+                        console.print(
+                            f"[dim][kosmos] Wrote {_run_dir / 'eval_summary.md'}[/dim]"
+                        )
+                    except ValueError as _exc:
+                        console.print(f"[dim][kosmos] Could not aggregate: {_exc}[/dim]")
+                except Exception as _exc:
+                    console.print(f"[dim][kosmos] Aggregation setup failed: {_exc}[/dim]")
+
                 trials = result.trials if hasattr(result, 'trials') else []
                 all_trials.extend(trials)
 

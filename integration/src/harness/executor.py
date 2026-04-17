@@ -164,6 +164,20 @@ class EvaluationExecutor:
             except Exception:
                 pass
 
+        # Load test_metadata.json for FAIL_TO_PASS / PASS_TO_PASS lists (Kosmos)
+        fail_to_pass: list[str] = []
+        pass_to_pass: list[str] = []
+        test_meta_path = task_dir / "test_metadata.json"
+        if test_meta_path.exists():
+            try:
+                with open(test_meta_path) as f:
+                    meta_data = json.load(f)
+                fail_to_pass = list(meta_data.get("FAIL_TO_PASS") or [])
+                pass_to_pass = list(meta_data.get("PASS_TO_PASS") or [])
+            except Exception:
+                # Malformed metadata is non-fatal; leave lists empty.
+                pass
+
         task_files = []
 
         excluded_files = {
@@ -218,6 +232,10 @@ class EvaluationExecutor:
             max_test_timeout_sec=max_test_timeout_sec,
             max_steps=getattr(config, "max_steps", None),
             process_checks=process_checks,
+            run_dir=config.runs_dir / config.run_id,
+            model=config.model.value if hasattr(config.model, "value") else str(config.model),
+            fail_to_pass=fail_to_pass,
+            pass_to_pass=pass_to_pass,
         )
 
     def _get_llm(

@@ -712,6 +712,67 @@ class MultiStepRunner:
         if task_logger:
             task_logger.log_evaluation_result(evaluation_result)
 
+        # Kosmos: write per-trial results.json alongside existing outputs.
+        # Coarse first pass — maps aggregate pass/fail onto all F2P/P2P test
+        # IDs uniformly. Per-test granularity is a future enhancement once the
+        # evaluator exposes individual test results.
+        trial_dir = getattr(self, "_kosmos_trial_dir", None)
+        if trial_dir is not None:
+            try:
+                _f2p = list(getattr(task_context, "fail_to_pass", []) or [])
+                _p2p = list(getattr(task_context, "pass_to_pass", []) or [])
+                _passed = bool(evaluation_result.get("passed", False))
+                _status = "PASSED" if _passed else "FAILED"
+                _all_ids = _f2p + _p2p
+                _test_results = {tid: _status for tid in _all_ids}
+                _test_durations: dict[str, int] = {tid: 0 for tid in _all_ids}
+                _test_errors: dict[str, str] = {}
+                if not _passed:
+                    _err = (evaluation_result.get("test_output") or "")[:500]
+                    _test_errors = {tid: _err for tid in _all_ids}
+
+                # Derive completion signal from execution.status when possible.
+                _signal = "task_complete"
+                _status_value = getattr(execution, "status", None)
+                if _status_value is not None:
+                    _s = str(getattr(_status_value, "value", _status_value)).lower()
+                    if "timeout" in _s:
+                        _signal = "timeout"
+                    elif "error" in _s or "failed" in _s:
+                        _signal = "error"
+
+                _total_in = sum(
+                    s.get("agent_response", {}).get("metadata", {}).get("input_tokens", 0)
+                    for s in steps
+                )
+                _total_out = sum(
+                    s.get("agent_response", {}).get("metadata", {}).get("output_tokens", 0)
+                    for s in steps
+                )
+
+                evaluator.write_layer_results(
+                    task_dir=task_context.task_dir,
+                    trial_dir=trial_dir,
+                    trial=trial_number,
+                    task=task_context.task_id,
+                    model=getattr(task_context, "model", None) or "",
+                    wall_time_s=(datetime.now() - start_time).total_seconds(),
+                    total_cost_usd=0.0,  # TODO: accumulate from per-step metadata in future task
+                    total_tokens_in=_total_in,
+                    total_tokens_out=_total_out,
+                    completion_signal=_signal,
+                    f2p_tests=_f2p,
+                    p2p_tests=_p2p,
+                    test_results=_test_results,
+                    test_durations_ms=_test_durations,
+                    test_errors=_test_errors,
+                )
+            except Exception as _e:
+                if task_logger:
+                    task_logger._log(f"[kosmos] write_layer_results failed: {_e}")
+                elif logger:
+                    logger._log(f"[kosmos] write_layer_results failed: {_e}")
+
         # Run process verification if task defines process_checks
         process_checks = getattr(task_context, "process_checks", None)
         if process_checks and task_logger:
@@ -783,6 +844,24 @@ class MultiStepRunner:
         start_time = datetime.now()
         logs = []
         steps = []
+
+        # Wire Kosmos trajectory writer + per-trial results dir.
+        # The runner pool loans a runner to a single trial at a time, so setting
+        # self.trajectory_writer here is safe.
+        self._kosmos_trial_dir = None
+        try:
+            _run_dir = getattr(task_context, "run_dir", None)
+            if _run_dir is not None:
+                _trial_dir = Path(_run_dir) / f"trial_{trial_number:02d}"
+                _trial_dir.mkdir(parents=True, exist_ok=True)
+                self.trajectory_writer = TrajectoryWriter(_trial_dir / "trajectory.jsonl")
+                self._kosmos_trial_dir = _trial_dir
+            else:
+                self.trajectory_writer = None
+        except Exception:
+            # If anything fails, fall back to no writer — do not break the trial
+            self.trajectory_writer = None
+            self._kosmos_trial_dir = None
 
         # Determine max timeout
         max_timeout = float(task_context.timeout)
@@ -962,6 +1041,14 @@ class MultiStepRunner:
                 except Exception as e:
                     if "logs" in locals() and logs:
                         logs.append(f"Error cleaning up tools: {e}")
+            # Close Kosmos trajectory writer if it was opened.
+            if self.trajectory_writer is not None:
+                try:
+                    self.trajectory_writer.close()
+                except Exception:
+                    pass
+                finally:
+                    self.trajectory_writer = None
 
             if "docker_ctx" in locals() and docker_ctx:
                 try:
