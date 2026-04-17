@@ -48,7 +48,63 @@ from eval_runner.config import (
 from parser.frameworks import get_test_command_with_output
 from parser.eval_utils import parse_test_results, TestResults, TaskInstance
 
+# Wire common/ into sys.path for Kosmos instrumentation
+import sys as _sys
+from pathlib import Path as _Path
+_REPO_ROOT = _Path(__file__).resolve().parent.parent.parent
+if str(_REPO_ROOT) not in _sys.path:
+    _sys.path.insert(0, str(_REPO_ROOT))
+
+from common.layers import LayerEvaluator  # noqa: E402
+
 logger = get_logger(__name__)
+
+
+def write_layer_results_for_trial(
+    *,
+    task_dir,
+    trial_dir,
+    trial: int,
+    task: str,
+    model: str,
+    wall_time_s: float,
+    total_cost_usd: float,
+    total_tokens_in: int,
+    total_tokens_out: int,
+    completion_signal: str,
+    f2p_tests,
+    p2p_tests,
+    test_results,
+    test_durations_ms,
+    test_errors,
+) -> None:
+    """Produce trial_dir/results.json using LayerEvaluator.
+
+    If task_dir/test_layers.json exists, uses it; otherwise falls back to
+    F2P/P2P layers. Tests missing from test_results are marked ERROR.
+    """
+    evaluator = LayerEvaluator(
+        task_dir=task_dir,
+        f2p_tests=list(f2p_tests),
+        p2p_tests=list(p2p_tests),
+    )
+    layers = evaluator.load_layers()
+    evaluated = evaluator.evaluate(
+        layers, test_results, test_durations_ms, test_errors,
+    )
+    _Path(trial_dir).mkdir(parents=True, exist_ok=True)
+    evaluator.write_results(
+        _Path(trial_dir) / "results.json",
+        trial=trial,
+        task=task,
+        model=model,
+        wall_time_s=wall_time_s,
+        total_cost_usd=total_cost_usd,
+        total_tokens_in=total_tokens_in,
+        total_tokens_out=total_tokens_out,
+        completion_signal=completion_signal,
+        layers=evaluated,
+    )
 
 
 def extract_test_patch_targets(patch_content: str) -> tuple[list[str], list[str]]:
@@ -334,15 +390,61 @@ def unified_scorer(
                         )
                 
                 await sandbox().write_file("/app/test.patch", test_patch_content)
+
+                # Strategy 1: git apply (strict)
                 apply_result = await sandbox().exec(
                     ["bash", "-c", "cd /app/repo && git apply /app/test.patch 2>&1"],
                     timeout=TIMEOUTS.git_apply,
                 )
                 if apply_result.success:
                     test_patch_applied = True
-                else:
-                    test_patch_error = apply_result.stdout or apply_result.stderr or "Unknown error"
-                    task_logger.error(f"Test patch failed to apply: {test_patch_error}")
+                    task_logger.info("Test patch applied with git apply (strict)")
+
+                # Strategy 2: git apply --3way (needs blob SHAs in repo)
+                if not test_patch_applied:
+                    await sandbox().exec(
+                        ["bash", "-c", "cd /app/repo && git checkout HEAD -- . 2>&1 || true"],
+                        timeout=TIMEOUTS.git_checkout,
+                    )
+                    apply_result = await sandbox().exec(
+                        ["bash", "-c", "cd /app/repo && git apply --3way /app/test.patch 2>&1"],
+                        timeout=TIMEOUTS.git_apply,
+                    )
+                    if apply_result.success:
+                        test_patch_applied = True
+                        task_logger.info("Test patch applied with git apply --3way")
+                    else:
+                        check = await sandbox().exec(
+                            ["bash", "-c", "cd /app/repo && git diff --name-only 2>&1"],
+                            timeout=TIMEOUTS.git_apply,
+                        )
+                        if check.success and check.stdout.strip():
+                            task_logger.warning(
+                                f"Test patch 3-way merge had conflicts but produced changes: {check.stdout.strip()}"
+                            )
+                            await sandbox().exec(
+                                ["bash", "-c", "cd /app/repo && git checkout --theirs . 2>&1 && git add -A 2>&1"],
+                                timeout=TIMEOUTS.git_apply,
+                            )
+                            test_patch_applied = True
+                            task_logger.info("Test patch applied with --3way conflict resolution")
+
+                # Strategy 3: patch -p1 (line-based, ignores blob SHAs, tolerates fuzz)
+                if not test_patch_applied:
+                    await sandbox().exec(
+                        ["bash", "-c", "cd /app/repo && git checkout HEAD -- . 2>&1 || true"],
+                        timeout=TIMEOUTS.git_checkout,
+                    )
+                    apply_result = await sandbox().exec(
+                        ["bash", "-c", "cd /app/repo && patch -p1 --fuzz=3 --force < /app/test.patch 2>&1"],
+                        timeout=TIMEOUTS.git_apply,
+                    )
+                    if apply_result.success:
+                        test_patch_applied = True
+                        task_logger.info(f"Test patch applied with patch -p1: {apply_result.stdout.strip()}")
+                    else:
+                        test_patch_error = apply_result.stdout or apply_result.stderr or "Unknown error"
+                        task_logger.error(f"Test patch failed all strategies: {test_patch_error}")
         except Exception as e:
             test_patch_error = str(e)
             task_logger.error(f"Exception applying test patch: {e}")
