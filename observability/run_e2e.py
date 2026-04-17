@@ -550,7 +550,7 @@ def run_parallel_mode(args, all_tasks) -> int:
     total_elapsed = time.time() - start_time
     total_runs = len(results)
     pass_rate = passed_count / total_runs if total_runs > 0 else 0
-    
+
     print("\n" + "=" * 70)
     print("Summary")
     print("=" * 70)
@@ -561,7 +561,34 @@ def run_parallel_mode(args, all_tasks) -> int:
     print(f"Total time:   {total_elapsed/60:.1f} minutes")
     print(f"Results:      {output_dir}/results.json")
     print("=" * 70)
-    
+
+    # Kosmos post-dispatch aggregation (best-effort)
+    try:
+        import sys as _sys
+        from pathlib import Path as _Path
+        _REPO = _Path(__file__).resolve().parent.parent
+        if str(_REPO) not in _sys.path:
+            _sys.path.insert(0, str(_REPO))
+        from common.trials import aggregate_trials, write_eval_summary
+
+        # The path where per-trial results.json files would live — for
+        # observability, the existing scorer writes to
+        # EVAL_OUTPUTS_DIR / <task_id> / <run_id> / trial_NN / (Task 15 wiring)
+        # but the scorer doesn't yet produce results.json per trial (Task 16
+        # provides the function but it's not wired into the scorer body).
+        # aggregate_trials will skip gracefully with a warning when no
+        # results.json files are present.
+        _run_dir = output_dir if output_dir.exists() else None
+        if _run_dir:
+            try:
+                _agg = aggregate_trials(_run_dir)
+                write_eval_summary(_run_dir, _agg)
+                print(f"[kosmos] Wrote {_run_dir / 'eval_summary.md'}", file=_sys.stderr)
+            except ValueError as _exc:
+                print(f"[kosmos] Could not aggregate: {_exc}", file=_sys.stderr)
+    except Exception as _exc:
+        print(f"[kosmos] Aggregation setup failed: {_exc}", file=_sys.stderr)
+
     return 0
 
 
