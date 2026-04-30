@@ -1054,18 +1054,7 @@ def parse_bespoke_libgeos(text_output: str) -> dict[str, str] | None:
     """
     results = {}
 
-    # Primary check: libgeos uses "tests summary: ok:" to indicate all tests passed
-    # This matches the validation_code_snippet in test_metadata.json
-    if "tests summary: ok:" in text_output:
-        results["yes"] = "PASSED"
-        return results
-    
-    # Check for test failure indicators
-    if "tests summary:" in text_output and "ok:" not in text_output:
-        results["yes"] = "FAILED"
-        return results
-    
-    # Fallback: Try to parse individual test lines (older format)
+    # Parse individual test group lines: "TestSuite::TestName: ...."
     test_line_pattern = re.compile(
         r"^([a-zA-Z_][a-zA-Z0-9_:]*::[a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.+?)(?:\n|$)",
         re.MULTILINE,
@@ -1074,28 +1063,34 @@ def parse_bespoke_libgeos(text_output: str) -> dict[str, str] | None:
     for match in test_line_pattern.finditer(text_output):
         test_id = match.group(1)
         test_output_line = match.group(2)
-
         has_failure = bool(
             re.search(r"\[.*=[FX]\]|(?<!\w)[FX](?!\w)", test_output_line)
         )
+        results[test_id] = "FAILED" if has_failure else "PASSED"
 
-        if has_failure:
-            results[test_id] = "FAILED"
-        else:
-            results[test_id] = "PASSED"
+    if results:
+        # If the suite completed successfully, keep individual results as-is.
+        # If the suite timed out or crashed (no summary), the run is incomplete —
+        # mark everything FAILED so new tests added by the golden patch show as F2P.
+        if "tests summary: ok:" not in text_output:
+            results = {k: "FAILED" for k in results}
+        return results
 
-    if not results:
-        error_indicators = [
-            "error:",
-            "undefined reference",
-            "fatal error:",
-            "ld returned",
-            "cannot find -l",
-        ]
-        has_errors = any(indicator in text_output for indicator in error_indicators)
-        return None if has_errors else results
+    # No individual test lines found — fall back to synthetic "yes" marker
+    if "tests summary: ok:" in text_output:
+        return {"yes": "PASSED"}
+    if "tests summary:" in text_output and "ok:" not in text_output:
+        return {"yes": "FAILED"}
 
-    return results
+    error_indicators = [
+        "error:",
+        "undefined reference",
+        "fatal error:",
+        "ld returned",
+        "cannot find -l",
+    ]
+    has_errors = any(indicator in text_output for indicator in error_indicators)
+    return None if has_errors else results
 
 
 def _normalize_swift_test_name(raw_name: str) -> str:
