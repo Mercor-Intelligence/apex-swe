@@ -24,12 +24,13 @@ Each harness has its own setup and entry point. Follow the guide for the task ty
 Tasks run in Docker containers with MCP (Model Context Protocol) tools for terminal access and file operations.
 
 ```bash
-# Install (creates venv at repo root, installs the apx CLI)
+cd integration
+
+# Install (creates venv in integration directory, installs the apx CLI)
 ./install.sh
 
 # Activate and download tasks from HuggingFace
 source venv/bin/activate
-cd integration
 pip install huggingface_hub
 # See integration/README.md for the download script
 
@@ -90,9 +91,9 @@ export FIREWORKS_API_KEY='...'          # DeepSeek, Qwen, Kimi
 
 ```
 apex-swe/
-├── install.sh              # Integration harness installer
 ├── LICENSE                 # MIT License
 ├── integration/            # Integration evaluation harness
+│   ├── install.sh          # Integration harness installer
 │   ├── src/                # Harness source code
 │   ├── tasks/              # Task definitions
 │   └── README.md
