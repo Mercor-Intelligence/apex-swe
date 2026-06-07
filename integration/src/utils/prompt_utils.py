@@ -172,6 +172,103 @@ Starting fresh - no previous commands executed"""
     return base_prompt.replace("[[TASK_INSTRUCTION]]", task_context.instruction)
 
 
+def build_collaborative_prompt(
+    task_context: "TaskContext",
+    agent_id: int,
+    working_dir: Path,
+    tool_executor: "ToolExecutor",
+    max_timeout: float,
+) -> str:
+    """Initial prompt for the collaborative multi-agent runner."""
+    other_id = 1 - agent_id
+    todo_tool_enabled = tool_executor.has_tool("todo")
+
+    prompt = f"""You are Agent {agent_id + 1} of 2 working on a software engineering task.
+
+Another agent is working alongside you in this same container. You share the entire filesystem — any file either of you creates or modifies is immediately visible to the other.
+
+You are building ONE shared solution together. Coordinate with the other agent so your efforts are complementary, not duplicated. How you coordinate is entirely up to you.
+
+When you both agree the solution is complete, create the file /app/READY_TO_SUBMIT to submit it. Both agents must reach consensus before creating this file. If either agent believes more work is needed after it has been created, delete it and continue working. You have one opportunity to submit.
+
+━━━━ TOOLS ━━━━
+Format your response as XML:
+
+<response>
+<analysis>
+Analyse the current state based on terminal output and what you know so far.
+</analysis>
+<plan>
+What you will do next and why.
+</plan>
+<commands>
+<keystrokes duration="0.1">cd /app && ls</keystrokes>
+</commands>
+</response>
+
+COMMAND FORMAT:
+<keystrokes duration="0.1">command here</keystrokes>
+- No JSON escaping — write commands exactly as you would type them
+- duration="0.1" for fast commands (ls, cat, grep)
+- duration="1.0" for slower commands (python scripts, builds)
+
+⚠️ FILE WRITING: NEVER use heredoc syntax (cat << EOF). Use python3 or printf:
+  python3 -c 'import sys; open("/path/file","w").write(sys.argv[1])' 'content here'
+  printf '%s\\n' 'line1' 'line2' > /path/file
+
+DEBUGGING: When commands fail, read the error and adapt. Do not retry identical failing commands.
+"""
+
+    if todo_tool_enabled:
+        prompt += """
+TODO TOOL:
+<tool_use>
+{"tool":"todo","action":"add","title":"My task","status":"todo"}
+</tool_use>
+<tool_use>
+{"tool":"todo","action":"list"}
+</tool_use>
+"""
+
+    prompt += f"""
+ENVIRONMENT:
+- Working directory: /app
+
+Task Description:
+{task_context.instruction}
+
+Current terminal state:
+Starting fresh - no previous commands executed"""
+
+    return prompt
+
+
+def build_collaborative_episode_prompt(
+    step_num: int,
+    initial_prompt: str,
+    terminal_content: str,
+    agent_id: int,
+    todo_list_text: str | None = None,
+) -> str:
+    """Episode prompt for collaborative agents — terminal state and continuation."""
+    if not terminal_content or not terminal_content.strip():
+        return initial_prompt if step_num == 1 else "No terminal output available."
+
+    todos_section = f"\n\nTODO LIST:\n{todo_list_text}" if todo_list_text else ""
+    terminal_section = (
+        f"CURRENT TERMINAL STATE:\n{terminal_content}{todos_section}\n\n"
+        f"Continue with your next actions."
+    )
+
+    if step_num == 1:
+        if "Note: You have a maximum" in initial_prompt:
+            parts = initial_prompt.split("Note: You have a maximum")
+            return parts[0] + terminal_section + "\n\nNote: You have a maximum" + parts[1]
+        return initial_prompt + "\n\n" + terminal_section
+    else:
+        return terminal_section
+
+
 def build_episode_prompt(
     step_num: int,
     initial_prompt: str,

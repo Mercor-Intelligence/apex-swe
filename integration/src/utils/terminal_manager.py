@@ -170,7 +170,7 @@ class TerminalConstants:
     SESSION_TIMEOUT = 3600  # 1 hour
     BUFFER_SIZE = 4096
     MAX_SESSION_HISTORY = 1000
-    TMUX_COMPLETION_COMMAND = "; tmux wait -S done"
+    TMUX_COMPLETION_COMMAND = "; echo CMD_EXIT:$?; tmux wait -S done"
     ENTER_KEYS = {"Enter", "C-m", "KPEnter", "C-j", "^M", "^J"}
     ENDS_WITH_NEWLINE_PATTERN = r"[\r\n]$"
     NEWLINE_CHARS = "\r\n"
@@ -645,7 +645,7 @@ class TmuxSession:
                     self._heredoc_lines = []
                     self._heredoc_start_command = None
                     # Send the closing delimiter and THEN wait for completion
-                    return [line + "\n; tmux wait -S done", "Enter"], True
+                    return [line + "\n; echo CMD_EXIT:$?; tmux wait -S done", "Enter"], True
                 else:
                     # This is heredoc content - just send it, don't wait
                     self._heredoc_lines.append(line)
@@ -677,8 +677,7 @@ class TmuxSession:
                 tmp_script = f"/tmp/tmux_cmd_{self._session_name}.sh"
                 wrapped_command = (
                     f"python3 -c 'import base64; open(\"{tmp_script}\", \"w\").write(base64.b64decode(\"{encoded_cmd}\").decode())' && "
-                    f"chmod +x {tmp_script} && {tmp_script} && tmux wait -S done || "
-                    f"{{ echo \"Complex command failed with exit code $?\"; tmux wait -S done; }}"
+                    f"chmod +x {tmp_script} && {tmp_script}; echo CMD_EXIT:$?; tmux wait -S done"
                 )
                 # Return the wrapped command - completion signal is already included
                 return [wrapped_command, "Enter"], True
@@ -697,14 +696,14 @@ class TmuxSession:
                             # before appending completion command
                             if not command.endswith("\n"):
                                 command = command + "\n"
-                            return [command + "; tmux wait -S done", "Enter"], True
+                            return [command + "; echo CMD_EXIT:$?; tmux wait -S done", "Enter"], True
                     # Heredoc not properly closed or pattern not matched - send as-is
                     # and hope for the best (will likely timeout)
                     logger.warning("Heredoc could not be converted and may timeout")
-                    return [command, "Enter", "tmux wait -S done", "Enter"], True
+                    return [command, "Enter", "echo CMD_EXIT:$?; tmux wait -S done", "Enter"], True
                 else:
                     # For normal commands, append completion command with semicolon
-                    return [command, "; tmux wait -S done", "Enter"], True
+                    return [command, "; echo CMD_EXIT:$?; tmux wait -S done", "Enter"], True
 
         keys.extend([TerminalConstants.TMUX_COMPLETION_COMMAND, "Enter"])
         return keys, True

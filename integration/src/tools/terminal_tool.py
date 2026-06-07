@@ -1,5 +1,6 @@
 """Terminal execution tool."""
 
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -9,22 +10,28 @@ from .tool import Tool
 from src.utils.terminal_manager import TmuxSession
 from src.utils.logging_utils import get_logger
 
+# Ensures only one agent at a time runs tmux setup (which may involve apt-get install),
+# preventing dpkg lock conflicts when multiple agents initialise simultaneously.
+_tmux_init_lock = threading.Lock()
+
 
 class TerminalTool(Tool):
     """Execute terminal commands inside a Docker container using tmux."""
 
-    def __init__(self, working_dir: Path, docker_manager):
+    def __init__(self, working_dir: Path, docker_manager, session_name: str | None = None):
         """
         Initialize Docker terminal tool.
 
         Args:
             working_dir: Working directory for command execution
             docker_manager: DockerComposeManager instance
+            session_name: Optional tmux session name override (ensures isolation between agents)
         """
         self.working_dir = working_dir
         self.docker_manager = docker_manager
         self.command_history = []
         self.tmux_session = None
+        self._session_name_override = session_name
         self._initialize_tmux_session()
 
     @property
@@ -37,19 +44,20 @@ class TerminalTool(Tool):
 
     def _initialize_tmux_session(self):
         """Initialize tmux session for terminal-bench compatible logging."""
-        try:
-            container = self.docker_manager.get_container()
-            if container:
-                session_name = f"apex_{int(time.time())}"
-                self.tmux_session = TmuxSession(
-                    session_name=session_name, container=container
-                )
-                self.tmux_session.start()
+        with _tmux_init_lock:
+            try:
+                container = self.docker_manager.get_container()
+                if container:
+                    session_name = self._session_name_override or f"apex_{int(time.time())}"
+                    self.tmux_session = TmuxSession(
+                        session_name=session_name, container=container
+                    )
+                    self.tmux_session.start()
 
-        except Exception as e:
-            logger = get_logger()
-            if logger:
-                logger._log(f"TmuxSession initialization failed: {e}")
+            except Exception as e:
+                logger = get_logger()
+                if logger:
+                    logger._log(f"TmuxSession initialization failed: {e}")
 
     def execute(
         self, command: str, timeout: int | None = None, **kwargs

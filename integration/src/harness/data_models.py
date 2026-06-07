@@ -44,11 +44,14 @@ class ModelType(str, Enum):
     KIMI_K2P5 = "fireworks_ai/accounts/fireworks/models/kimi-k2p5"
 
     CLAUDE_OPUS_4_6 = "claude-opus-4-6"
+    CLAUDE_OPUS_4_8 = "claude-opus-4-8"
     GPT5_2 = "gpt-5.2"
     GPT5_2_CODEX = "gpt-5.2-codex"
     GPT5_3 = "gpt-5.3"
     GPT5_3_CODEX = "gpt-5.3-codex"
     GPT5_4 = "gpt-5.4"
+    GPT5_5 = "gpt-5.5"
+    GPT5_5_PRO = "gpt-5.5-pro"
     GEMINI_3_1_PRO_PREVIEW = "gemini/gemini-3.1-pro-preview"
 
     CUSTOM = "custom"
@@ -149,6 +152,12 @@ class EvaluationConfig(BaseModel):
     )
     reasoning_effort: str | None = Field(
         None, description="Reasoning effort: low, medium, high (auto-detected for supported models)"
+    )
+    n_agents: int = Field(
+        1, ge=1, le=2, description="Number of collaborative agents (1=single, 2=multi-agent)"
+    )
+    agent_models: list[str] | None = Field(
+        None, description="Per-agent model overrides for multi-agent mode e.g. ['claude-opus-4-8', 'gpt-4o']"
     )
     custom_agent_config: dict[str, Any] | None = Field(
         None, description="Custom agent configuration"
