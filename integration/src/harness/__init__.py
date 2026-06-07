@@ -15,6 +15,7 @@ from .data_models import (
 from .evaluator import TaskEvaluator
 from .executor import EvaluationExecutor
 from .multi_step_runner import MultiStepRunner
+from .collaborative_runner import CollaborativeRunner
 
 __all__ = [
     "ExecutionStatus",
@@ -27,4 +28,5 @@ __all__ = [
     "TaskEvaluator",
     "EvaluationExecutor",
     "MultiStepRunner",
+    "CollaborativeRunner",
 ]

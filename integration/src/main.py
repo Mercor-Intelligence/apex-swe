@@ -50,6 +50,8 @@ def run_experiment(
     timeout: int = typer.Option(900, "--timeout", help="Timeout per trial in seconds"),
     max_workers: int = typer.Option(4, "--max-workers", "-w", help="Maximum parallel workers"),
     max_steps: Optional[int] = typer.Option(None, "--max-steps", help="Maximum steps per trial"),
+    n_agents: int = typer.Option(1, "--n-agents", help="Number of collaborative agents (1=single agent, 2=multi-agent)"),
+    model_pairs: Optional[str] = typer.Option(None, "--model-pairs", help="Comma-separated model pairs for multi-agent mode e.g. 'claude-opus-4-8,gpt-4o'. Multiple pairs separated by space run separate experiments. Required when --n-agents 2."),
     todo_tool_enabled: bool = typer.Option(False, "--todo-tool-enabled", help="Enable todo tool"),
     reasoning_effort: Optional[str] = typer.Option(None, "--reasoning-effort", help="Reasoning effort: low, medium, high (auto-detected for supported models)"),
     runs_dir: Path = typer.Option(Path("runs"), "--runs-dir", "-r", help="Results directory"),
@@ -58,10 +60,26 @@ def run_experiment(
     """Run parallel experiments across multiple tasks and models."""
     
     task_list = [t.strip() for t in tasks.split(",")]
-    model_list = [m.strip() for m in models.split(",")]
-    
+
+    # Multi-agent mode: use --model-pairs and ignore --models
+    if n_agents > 1:
+        if not model_pairs:
+            console.print("[red]--model-pairs is required when --n-agents 2[/red]")
+            raise typer.Exit(1)
+        pairs_list = [[m.strip() for m in p.strip().split(",")] for p in model_pairs.split(";")]
+        for pair in pairs_list:
+            if len(pair) != n_agents:
+                console.print(f"[red]Each model pair must have exactly {n_agents} models, got: {pair}[/red]")
+                raise typer.Exit(1)
+        run_specs = pairs_list  # list of [model0, model1, ...]
+        display_models = ["+".join(p) for p in pairs_list]
+    else:
+        model_list = [m.strip() for m in models.split(",")]
+        run_specs = [[m] for m in model_list]
+        display_models = model_list
+
     console.print(f"\n[bold]Starting experiment:[/bold] {experiment_id}\n")
-    
+
     table = create_table(
         "Execution Plan",
         [
@@ -71,27 +89,28 @@ def run_experiment(
             ("Total\n Runs", "magenta"),
         ],
     )
-    
+
     for task in task_list:
         table.add_row(
             task,
-            ", ".join(model_list),
+            ", ".join(display_models),
             str(n_trials),
-            str(len(model_list) * n_trials),
+            str(len(run_specs) * n_trials),
         )
-    
+
     console.print(table)
-    console.print(f"\n[bold]Total runs to execute:[/bold] {len(task_list) * len(model_list) * n_trials}")
+    console.print(f"\n[bold]Total runs to execute:[/bold] {len(task_list) * len(run_specs) * n_trials}")
     console.print(f"[bold]Max parallel workers:[/bold] {max_workers}")
     console.print(f"[bold]Timeout per trial:[/bold] {timeout}s\n")
-    
+
     try:
         experiment_dir = runs_dir / f'experiment_{experiment_id}'
         experiment_dir.mkdir(parents=True, exist_ok=True)
         metadata = {
             "experiment_id": experiment_id,
             "tasks": task_list,
-            "models": model_list,
+            "model_pairs" if n_agents > 1 else "models": display_models,
+            "n_agents": n_agents,
             "n_trials": n_trials,
             "timeout": timeout,
             "created_at": datetime.now().isoformat(),
@@ -103,51 +122,64 @@ def run_experiment(
         all_trials = []
         all_results = {}
 
-        for task_id in task_list:
-            for model in model_list:
-                console.print(f"\n[bold cyan]Running task:[/bold cyan] {task_id} with {model}")
+        def run_one(task_id: str, spec: list[str]):
+            primary_model = spec[0]
+            agent_models_for_run = spec if n_agents > 1 else None
+            display_label = "+".join(spec) if n_agents > 1 else primary_model
 
-                task_dir = tasks_dir / task_id
-                if not (task_dir / "task.yaml").exists():
-                    console.print(f"[red]Skipping {task_id}: task.yaml not found[/red]")
-                    continue
+            task_dir = tasks_dir / task_id
+            if not (task_dir / "task.yaml").exists():
+                console.print(f"[red]Skipping {task_id}: task.yaml not found[/red]")
+                return display_label, [], None
 
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                run_id = f"{experiment_id}_{task_id}_{model}_trial01_{timestamp}"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            run_id = f"{experiment_id}_{task_id}_{display_label}_trial01_{timestamp}"
 
-                config = EvaluationConfig(
-                    run_id=run_id,
-                    task_id=task_id,
-                    model=model,
-                    timeout=timeout,
-                    runs_dir=runs_dir,
-                    tasks_dir=tasks_dir,
-                    max_steps=max_steps,
-                    todo_tool_enabled=todo_tool_enabled,
-                    reasoning_effort=reasoning_effort,
-                    max_trials=n_trials,
-                )
+            config = EvaluationConfig(
+                run_id=run_id,
+                task_id=task_id,
+                model=primary_model,
+                timeout=timeout,
+                runs_dir=runs_dir,
+                tasks_dir=tasks_dir,
+                max_steps=max_steps,
+                todo_tool_enabled=todo_tool_enabled,
+                reasoning_effort=reasoning_effort,
+                max_trials=n_trials,
+                n_agents=n_agents,
+                agent_models=agent_models_for_run,
+            )
 
-                result = executor.execute_run(config)
+            console.print(f"\n[bold cyan]Running task:[/bold cyan] {task_id} with {display_label}")
+            result = executor.execute_run(config)
+            trials = result.trials if hasattr(result, "trials") else []
+            return display_label, trials, result
 
-                trials = result.trials if hasattr(result, 'trials') else []
-                all_trials.extend(trials)
-
-                result_key = f"{task_id}_{model}"
-                all_results[result_key] = (
-                    result.model_dump() if hasattr(result, 'model_dump') else str(result)
-                )
-
-                task_successful = sum(
-                    1
-                    for t in trials
-                    if t.status.value == "completed"
-                    and t.metadata
-                    and t.metadata.get("test_passed", False)
-                )
-                console.print(
-                    f"  [dim]Task {task_id}: {task_successful}/{len(trials)} trials passed[/dim]"
-                )
+        import concurrent.futures as _cf
+        jobs = [(task_id, spec) for task_id in task_list for spec in run_specs]
+        with _cf.ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(run_one, t, s): (t, s) for t, s in jobs}
+            for fut in _cf.as_completed(futures):
+                task_id, spec = futures[fut]
+                try:
+                    display_label, trials, result = fut.result()
+                    all_trials.extend(trials)
+                    if result is not None:
+                        result_key = f"{task_id}_{display_label}"
+                        all_results[result_key] = (
+                            result.model_dump() if hasattr(result, "model_dump") else str(result)
+                        )
+                        task_successful = sum(
+                            1 for t in trials
+                            if t.status.value == "completed"
+                            and t.metadata
+                            and t.metadata.get("test_passed", False)
+                        )
+                        console.print(
+                            f"  [dim]Task {task_id}: {task_successful}/{len(trials)} trials passed[/dim]"
+                        )
+                except Exception as e:
+                    console.print(f"[red]Error in {task_id}/{spec}: {e}[/red]")
 
         successful = sum(
             1
