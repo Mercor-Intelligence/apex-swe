@@ -1,5 +1,9 @@
 """Global configuration constants for apex-code."""
 
+MODELS_OMIT_TEMP = [
+    "claude-opus-4-8",
+]
+
 MODELS_NOT_SUPPORTING_TEMP = [
     "gpt-5",
     "gpt-5-codex",
@@ -9,6 +13,8 @@ MODELS_NOT_SUPPORTING_TEMP = [
     "gpt-5.3",
     "gpt-5.3-codex",
     "gpt-5.4",
+    "gpt-5.5",
+    "gpt-5.5-pro",
 ]
 
 # Models that support extended thinking / reasoning
@@ -24,6 +30,8 @@ MODELS_SUPPORTING_REASONING = {
     "gpt-5.3": "high",
     "gpt-5.3-codex": "high",
     "gpt-5.4": "high",
+    "gpt-5.5": "high",
+    "gpt-5.5-pro": "high",
     # xAI: uses reasoning_effort param (same as OpenAI)
     "xai/grok-4": "high",
     # Anthropic: uses thinking param with budget_tokens

@@ -18,6 +18,7 @@ class ToolExecutor:
         working_dir: Path | None = None,
         docker_manager=None,
         todo_tool_enabled: bool = False,
+        session_name: str | None = None,
     ):
         """Initialize tool executor."""
         self.working_dir = working_dir or Path.cwd()
@@ -25,7 +26,7 @@ class ToolExecutor:
 
         self.tools = {
             "file": FileTool(self.working_dir),
-            "terminal": TerminalTool(self.working_dir, docker_manager)
+            "terminal": TerminalTool(self.working_dir, docker_manager, session_name=session_name)
             if docker_manager
             else None,
         }

@@ -17,6 +17,7 @@ from src.config import (
     DEFAULT_TEMPERATURE,
     GEMINI_THINKING_BUDGETS,
     MODELS_NOT_SUPPORTING_TEMP,
+    MODELS_OMIT_TEMP,
     MODELS_SUPPORTING_REASONING,
     REQUIRED_TEMPERATURE_1_0,
 )
@@ -144,6 +145,10 @@ class LiteLLM:
                 **kwargs,
             }
 
+            # Remove temperature entirely for models that don't accept it
+            if self.model_name in MODELS_OMIT_TEMP:
+                completion_kwargs.pop("temperature", None)
+
             # Model-specific adjustments
             if self.model_name in ("claude-sonnet-4-20250514", "claude-sonnet-4-5-20250929"):
                 completion_kwargs["extra_headers"] = {"anthropic-beta": "context-1m-2025-08-07"}
@@ -155,7 +160,8 @@ class LiteLLM:
                 if provider == "anthropic":
                     budget = ANTHROPIC_THINKING_BUDGETS.get(self.reasoning_effort, 32_000)
                     completion_kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}
-                    completion_kwargs["temperature"] = 1.0  # Required for Anthropic thinking
+                    if self.model_name not in MODELS_OMIT_TEMP:
+                        completion_kwargs["temperature"] = 1.0  # Required for Anthropic thinking
                 elif provider == "google":
                     budget = GEMINI_THINKING_BUDGETS.get(self.reasoning_effort, 32_768)
                     completion_kwargs["thinking"] = {"type": "enabled", "budget_tokens": budget}

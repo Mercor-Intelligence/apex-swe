@@ -21,6 +21,7 @@ from .data_models import (
     TaskExecution,
 )
 from .multi_step_runner import MultiStepRunner
+from .collaborative_runner import CollaborativeRunner
 from src.utils.harness_utils import format_results
 from .data_models import ExecutionStatus
 
@@ -76,6 +77,7 @@ class EvaluationExecutor:
                 "task_id": config.task_id,
                 "model": config.model.value,
                 "max_trials": config.max_trials,
+                "n_agents": getattr(config, "n_agents", 1),
                 "timeout": task_duration,
                 "resume_from": resume_from,
                 "max_workers": self.max_workers,
@@ -113,6 +115,8 @@ class EvaluationExecutor:
             max_trials=remaining_trials,
             start_trial_num=completed_trials + 1,
             todo_tool_enabled=config.todo_tool_enabled,
+            n_agents=getattr(config, "n_agents", 1),
+            agent_models=getattr(config, "agent_models", None),
         )
 
         trials = existing_trials + new_trials
@@ -233,6 +237,8 @@ class EvaluationExecutor:
         max_trials: int,
         start_trial_num: int = 1,
         todo_tool_enabled: bool = False,
+        n_agents: int = 1,
+        agent_models: list[str] | None = None,
     ) -> list[TaskExecution]:
         """
         Execute trials in parallel using ThreadPoolExecutor with optimized resource usage.
@@ -250,15 +256,25 @@ class EvaluationExecutor:
         runner_pool = Queue(maxsize=self.max_workers)
         for _ in range(self.max_workers):
             max_steps = task_context.max_steps
-            runner_pool.put(
-                MultiStepRunner(
-                    llm,
-                    max_steps=max_steps,
-                    monitor_memory=True,
-                    log_level="INFO",
-                    todo_tool_enabled=todo_tool_enabled,
+            if n_agents > 1:
+                runner_pool.put(
+                    CollaborativeRunner(
+                        llm,
+                        max_steps=max_steps,
+                        todo_tool_enabled=todo_tool_enabled,
+                        agent_models=agent_models,
+                    )
                 )
-            )
+            else:
+                runner_pool.put(
+                    MultiStepRunner(
+                        llm,
+                        max_steps=max_steps,
+                        monitor_memory=True,
+                        log_level="INFO",
+                        todo_tool_enabled=todo_tool_enabled,
+                    )
+                )
 
         def run_single_trial_wrapper(trial_num: int) -> TaskExecution:
             """Wrapper for single trial execution with improved error isolation."""
